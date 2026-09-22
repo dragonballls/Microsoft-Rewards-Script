@@ -9,6 +9,7 @@ const { resolveAccountLocale } = require('../../dist/util/Locale.js')
 async function runCase(langCode, geoLocale, expectedLocale) {
     const accountLocale = resolveAccountLocale({ langCode, geoLocale })
     assert.equal(accountLocale.locale, expectedLocale)
+    console.log(`LOCALE_CASE_PASS ${langCode}/${geoLocale} -> ${accountLocale.locale}`)
 
     let observedAcceptLanguage = ''
     const server = http.createServer((req, res) => {
