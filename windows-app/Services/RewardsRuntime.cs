@@ -17,6 +17,12 @@ public sealed class RewardsRuntime : IDisposable
     public string NodePath { get; }
     public string BrowserPath { get; }
 
+    private Process? _api;
+    private Process? _dashboard;
+    private bool _ownsApi;
+    private bool _ownsDashboard;
+    private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(3) };
+
     private static string FindInstalledNode()
     {
         var candidates = new[]
