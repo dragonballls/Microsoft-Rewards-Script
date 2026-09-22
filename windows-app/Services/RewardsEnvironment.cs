@@ -134,8 +134,12 @@ public static class RewardsEnvironment
         psi.Environment["API_ALLOW_SCHEDULE_WRITE"] = "true";
         psi.Environment["API_ALLOW_CONFIG_REVEAL"] = "false";
         psi.Environment["API_CORS_ORIGIN"] = "*";
-        psi.Environment["PLAYWRIGHT_BROWSERS_PATH"] = browserPath;
-        psi.Environment["PATCHRIGHT_BROWSERS_PATH"] = browserPath;
+        if (Directory.Exists(browserPath))
+        {
+            psi.Environment["PLAYWRIGHT_BROWSERS_PATH"] = browserPath;
+            psi.Environment["PATCHRIGHT_BROWSERS_PATH"] = browserPath;
+        }
+
         psi.Environment["TZ"] = "America/Los_Angeles";
 
         foreach (var account in state.Accounts.OrderBy(x => x.Index))
