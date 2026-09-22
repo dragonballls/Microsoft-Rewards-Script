@@ -13,4 +13,7 @@ public sealed class AccountProfile
     public int ProxyPort { get; set; }
     public string ProxyUsername { get; set; } = "";
     public string ProxyPassword { get; set; } = "";
+    public bool ProxyHttp { get; set; }
+    public bool SaveFingerprintMobile { get; set; }
+    public bool SaveFingerprintDesktop { get; set; }
 }
