@@ -20,6 +20,7 @@ namespace RewardsManager
             int setGap = -1;
             bool verify = false;
             bool verifySwitch = false;
+            bool verifyRuntime = false;
             for (int i = 0; i < args.Length; i++)
             {
                 if (args[i] == "--tab" && i + 1 < args.Length && int.TryParse(args[i + 1], out int t))
@@ -30,6 +31,25 @@ namespace RewardsManager
                     verify = true;
                 else if (args[i] == "--verify-switch")
                     verifySwitch = true;
+                else if (args[i] == "--verify-runtime")
+                    verifyRuntime = true;
+            }
+
+            if (verifyRuntime)
+            {
+                var node = EnvCheck.CheckNode();
+                if (!node.ok)
+                    throw new InvalidOperationException("Packaged/runtime Node.js >= 24 is unavailable.");
+                if (!EnvCheck.HasNodeModules())
+                    throw new InvalidOperationException("Packaged node_modules is missing.");
+                if (!EnvCheck.HasDist())
+                    throw new InvalidOperationException("Packaged dist/index.js is missing.");
+                if (!EnvCheck.HasBrowser())
+                    throw new InvalidOperationException("Packaged Chromium runtime is missing.");
+                if (!EnvCheck.HasConfig())
+                    throw new InvalidOperationException("Packaged config.json is missing.");
+                Console.WriteLine("DESKTOP_RUNTIME_VERIFY_PASS");
+                return;
             }
 
             // 自检/验证模式直接进主界面，不弹环境向导
