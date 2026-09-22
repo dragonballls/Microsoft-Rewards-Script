@@ -105,7 +105,3 @@ jobs:
               run: |
                   echo "Formatting changes are required. Run 'npm run format' locally."
                   exit 1
-
-    windows-app-test:
-        name: Windows app integrated test
-        uses: ./.github/workflows/windows-app.yml
