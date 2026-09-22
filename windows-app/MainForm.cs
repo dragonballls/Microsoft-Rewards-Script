@@ -496,7 +496,7 @@ public sealed class MainForm : Form
 internal static class WindowsStartup
 {
     private const string RunKey =
-        @"SoftwareMicrosoftWindowsCurrentVersionRun";
+        @"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
 
     private const string ValueName = "MicrosoftRewardsApp";
 
@@ -510,7 +510,7 @@ internal static class WindowsStartup
             if (enabled)
             {
                 var exe = Environment.ProcessPath!;
-                key!.SetValue(ValueName, $""{exe}" --background");
+                key!.SetValue(ValueName, "\\"" + exe + "\\" --background");
             }
             else
             {
