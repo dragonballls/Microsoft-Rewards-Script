@@ -87,7 +87,10 @@ public static class RewardsEnvironment
                 ProxyUrl = Get("PROXY_URL"),
                 ProxyPort = proxyPort,
                 ProxyUsername = Get("PROXY_USERNAME"),
-                ProxyPassword = Get("PROXY_PASSWORD")
+                ProxyPassword = Get("PROXY_PASSWORD"),
+                ProxyHttp = string.Equals(Get("PROXY_HTTP"), "true", StringComparison.OrdinalIgnoreCase),
+                SaveFingerprintMobile = string.Equals(Get("SAVE_FINGERPRINT_MOBILE"), "true", StringComparison.OrdinalIgnoreCase),
+                SaveFingerprintDesktop = string.Equals(Get("SAVE_FINGERPRINT_DESKTOP"), "true", StringComparison.OrdinalIgnoreCase)
             });
         }
 
@@ -154,6 +157,9 @@ public static class RewardsEnvironment
             Set(psi, $"ACCOUNT_{account.Index}_PROXY_PORT", account.ProxyPort.ToString());
             Set(psi, $"ACCOUNT_{account.Index}_PROXY_USERNAME", account.ProxyUsername);
             Set(psi, $"ACCOUNT_{account.Index}_PROXY_PASSWORD", account.ProxyPassword);
+            Set(psi, $"ACCOUNT_{account.Index}_PROXY_HTTP", account.ProxyHttp ? "true" : "false");
+            Set(psi, $"ACCOUNT_{account.Index}_SAVE_FINGERPRINT_MOBILE", account.SaveFingerprintMobile ? "true" : "false");
+            Set(psi, $"ACCOUNT_{account.Index}_SAVE_FINGERPRINT_DESKTOP", account.SaveFingerprintDesktop ? "true" : "false");
         }
     }
 
