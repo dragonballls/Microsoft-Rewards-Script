@@ -106,14 +106,14 @@ public sealed class MainForm : Form
         {
             Text = "Microsoft Rewards Account",
             Dock = DockStyle.Top,
-            Height = 38,
+            Height = 34,
             Font = new Font("Segoe UI", 16, FontStyle.Bold)
         });
 
         var apiPanel = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
-            Height = 54,
+            Height = 52,
             ColumnCount = 3,
             RowCount = 1,
             Padding = new Padding(0, 4, 0, 4)
@@ -150,7 +150,7 @@ public sealed class MainForm : Form
         var grid = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
-            Height = 420,
+            Height = 416,
             ColumnCount = 2,
             RowCount = 13
         };
@@ -192,19 +192,19 @@ public sealed class MainForm : Form
             Text = "API key/token and account information are stored with Windows user-level encryption. "
                  + "Credentials are supplied to the Rewards runtime only when it starts.",
             Dock = DockStyle.Top,
-            Height = 48,
+            Height = 40,
             ForeColor = Color.DimGray
         });
 
         _startup.Text = "Start this app with Windows";
         _startup.Dock = DockStyle.Top;
-        _startup.Height = 34;
+        _startup.Height = 30;
         right.Controls.Add(_startup);
 
         var buttons = new FlowLayoutPanel
         {
             Dock = DockStyle.Top,
-            Height = 52
+            Height = 46
         };
 
         var save = MakeButton("Save Account", 120);
@@ -231,7 +231,7 @@ public sealed class MainForm : Form
 
         _status.Text = "Status: starting…";
         _status.Dock = DockStyle.Bottom;
-        _status.Height = 34;
+        _status.Height = 28;
         _status.Font = new Font("Segoe UI", 10, FontStyle.Bold);
         right.Controls.Add(_status);
 
@@ -250,7 +250,7 @@ public sealed class MainForm : Form
 
     private static void AddRow(TableLayoutPanel grid, int row, string title, Control control)
     {
-        grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
 
         grid.Controls.Add(new Label
         {
