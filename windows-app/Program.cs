@@ -1,3 +1,4 @@
+using System.Text;
 using MicrosoftRewardsApp.Services;
 
 namespace MicrosoftRewardsApp;
@@ -7,107 +8,62 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
-        if (args.Any(x => string.Equals(
-                x,
-                "--self-test",
-                StringComparison.OrdinalIgnoreCase)))
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+
+        if (HasArg(args, "--self-test"))
         {
             SelfTest.RunAsync().GetAwaiter().GetResult();
             return;
         }
 
         ApplicationConfiguration.Initialize();
-
-        var state = SecureStore.Load();
-
-        var runtime = new RewardsRuntime();
-        try
+        if (Directory.Exists(Path.Combine(AppContext.BaseDirectory, "node_modules")))
         {
-            MigrateLegacyConfiguration(state);
-
-            if (string.IsNullOrWhiteSpace(state.ApiToken))
-            {
-                state.ApiToken = RewardsEnvironment.NewToken();
-                SecureStore.Save(state);
-            }
-
-            if (state.StartWithWindows)
-                WindowsStartup.SetEnabled(true);
-
-            var startHidden = args.Any(x =>
-                string.Equals(x, "--background", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(x, "--tray", StringComparison.OrdinalIgnoreCase));
-
-            Application.Run(new MainForm(state, runtime, startHidden));
+            Environment.SetEnvironmentVariable("PLAYWRIGHT_BROWSERS_PATH", "0");
+            Environment.SetEnvironmentVariable("PATCHRIGHT_BROWSERS_PATH", "0");
         }
-        catch
+
+        var initialTab = ReadIntArg(args, "--tab", 0);
+        var setGap = ReadIntArg(args, "--setgap", -1);
+        var verify = HasArg(args, "--verify");
+        var verifySwitch = HasArg(args, "--verify-switch");
+
+        if (!verify && !verifySwitch && RewardsManager.EnvCheck.NeedsSetup())
         {
-            runtime.Dispose();
-            throw;
+            EnsureConfig();
+            using var wizard = new RewardsManager.EnvWizardForm(standalone: true);
+            if (wizard.ShowDialog() != DialogResult.OK)
+                return;
         }
+
+        Application.Run(new RewardsManager.MainForm(initialTab, setGap, verify, verifySwitch));
     }
 
-    private static void MigrateLegacyConfiguration(
-        AppState state)
+    private static bool HasArg(string[] args, string value)
     {
-        if (state.Accounts.Count > 0 && !string.IsNullOrWhiteSpace(state.ApiToken))
-            return;
+        return args.Any(x => string.Equals(x, value, StringComparison.OrdinalIgnoreCase));
+    }
 
-        var candidates = new[]
+    private static int ReadIntArg(string[] args, string name, int fallback)
+    {
+        for (var i = 0; i + 1 < args.Length; i++)
         {
-            Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                "MicrosoftRewardsFull", "Microsoft-Rewards-Script", ".env"),
-
-            Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                "Microsoft-Rewards-Script", ".env"),
-
-            Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                "microsoft-rewards-script", ".env"),
-
-            Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                "MicrosoftRewards", ".env")
-        };
-
-        string? migratedFile = null;
-
-        foreach (var file in candidates.Where(File.Exists))
-        {
-            var imported = RewardsEnvironment.ImportFromEnv(file);
-
-            if (state.Accounts.Count == 0 && imported.Count > 0)
-            {
-                state.Accounts = imported;
-                state.LegacyBotPath = Path.GetDirectoryName(file);
-                migratedFile = file;
-            }
-
-            if (string.IsNullOrWhiteSpace(state.ApiToken))
-            {
-                var apiToken = RewardsEnvironment.GetApiToken(file);
-                if (!string.IsNullOrWhiteSpace(apiToken))
-                {
-                    state.ApiToken = apiToken;
-                    migratedFile ??= file;
-                }
-            }
-
-            if (state.Accounts.Count > 0)
-                break;
+            if (!string.Equals(args[i], name, StringComparison.OrdinalIgnoreCase))
+                continue;
+            return int.TryParse(args[i + 1], out var value) ? value : fallback;
         }
+        return fallback;
+    }
 
-        if (state.Accounts.Count == 0)
-            return;
-
-        if (string.IsNullOrWhiteSpace(state.ApiToken))
-            state.ApiToken = RewardsEnvironment.NewToken();
-
-        SecureStore.Save(state);
-
-        if (migratedFile is not null)
-            RewardsEnvironment.SanitizeLegacyEnv(migratedFile);
+    private static void EnsureConfig()
+    {
+        try
+        {
+            var config = Path.Combine(RewardsManager.ProjectPaths.Root, "config.json");
+            var example = Path.Combine(RewardsManager.ProjectPaths.Root, "config.example.json");
+            if (!File.Exists(config) && File.Exists(example))
+                File.Copy(example, config, overwrite: false);
+        }
+        catch { }
     }
 }
