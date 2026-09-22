@@ -17,6 +17,8 @@ public sealed class RewardsRuntime : IDisposable
 
     private Process? _api;
     private Process? _dashboard;
+    private bool _ownsApi;
+    private bool _ownsDashboard;
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(3) };
 
     public RewardsRuntime()
@@ -95,13 +97,21 @@ public sealed class RewardsRuntime : IDisposable
 
         if (!ApiRunning)
         {
-            _api = Start(
-                Path.Combine(BotPath, "scripts", "api", "server.js"),
-                BotPath,
-                state,
-                dashboard: false);
+            if (await IsApiAvailableAsync(state.ApiToken, cancellationToken))
+            {
+                _ownsApi = false;
+            }
+            else
+            {
+                _api = Start(
+                    Path.Combine(BotPath, "scripts", "api", "server.js"),
+                    BotPath,
+                    state,
+                    dashboard: false);
 
-            await WaitForApiAsync(state.ApiToken, cancellationToken);
+                _ownsApi = true;
+                await WaitForApiAsync(state.ApiToken, cancellationToken);
+            }
         }
 
         if (!DashboardRunning)
@@ -111,6 +121,8 @@ public sealed class RewardsRuntime : IDisposable
                 DashboardPath,
                 state,
                 dashboard: true);
+
+            _ownsDashboard = true;
         }
     }
 
@@ -152,6 +164,30 @@ public sealed class RewardsRuntime : IDisposable
         return Process.Start(psi)
             ?? throw new InvalidOperationException(
                 "Unable to start the Rewards runtime.");
+    }
+
+    private async Task<bool> IsApiAvailableAsync(
+        string token,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var request = new HttpRequestMessage(
+                HttpMethod.Get,
+                "http://127.0.0.1:3010/health");
+
+            request.Headers.Authorization =
+                new AuthenticationHeaderValue("Bearer", token);
+
+            using var response =
+                await _http.SendAsync(request, cancellationToken);
+
+            return response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private async Task WaitForApiAsync(
@@ -240,8 +276,14 @@ public sealed class RewardsRuntime : IDisposable
 
     public void Restart()
     {
-        Kill(ref _dashboard);
-        Kill(ref _api);
+        if (_ownsDashboard)
+            Kill(ref _dashboard);
+
+        if (_ownsApi)
+            Kill(ref _api);
+
+        _ownsDashboard = false;
+        _ownsApi = false;
     }
 
     private static void Kill(ref Process? process)
@@ -268,7 +310,11 @@ public sealed class RewardsRuntime : IDisposable
     public void Dispose()
     {
         _http.Dispose();
-        Kill(ref _dashboard);
-        Kill(ref _api);
+
+        if (_ownsDashboard)
+            Kill(ref _dashboard);
+
+        if (_ownsApi)
+            Kill(ref _api);
     }
 }
