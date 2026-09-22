@@ -59,6 +59,9 @@ jobs:
                   npx patchright install chromium
                   npm run build
 
+                  # The shipped dist does not require devDependencies; remove them before packaging.
+                  npm prune --omit=dev
+
                   New-Item -ItemType Directory -Path staging/bot -Force | Out-Null
                   Copy-Item package.json staging/bot/package.json -Force
                   Copy-Item package-lock.json staging/bot/package-lock.json -Force
