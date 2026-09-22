@@ -1,6 +1,4 @@
 using System.Net.Http.Headers;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using MicrosoftRewardsApp.Models;
 
@@ -46,6 +44,11 @@ public static class SelfTest
             Assert(loaded.Accounts[0].Password == testAccount.Password, "encrypted password");
             Assert(loaded.Accounts[0].TotpSecret == testAccount.TotpSecret, "encrypted TOTP");
             Assert(loaded.Accounts[0].ProxyPassword == testAccount.ProxyPassword, "encrypted proxy password");
+            Assert(loaded.Accounts[0].RecoveryEmail == testAccount.RecoveryEmail, "encrypted recovery email");
+            Assert(loaded.Accounts[0].GeoLocale == testAccount.GeoLocale, "encrypted geo locale");
+            Assert(loaded.Accounts[0].LangCode == testAccount.LangCode, "encrypted language code");
+            Assert(loaded.Accounts[0].ProxyUrl == testAccount.ProxyUrl, "encrypted proxy URL");
+            Assert(loaded.Accounts[0].ProxyPort == testAccount.ProxyPort, "encrypted proxy port");
             Assert(loaded.Accounts[0].ProxyHttp, "proxy HTTP flag");
             Assert(loaded.Accounts[0].SaveFingerprintMobile, "mobile fingerprint flag");
             Assert(loaded.Accounts[0].SaveFingerprintDesktop, "desktop fingerprint flag");
