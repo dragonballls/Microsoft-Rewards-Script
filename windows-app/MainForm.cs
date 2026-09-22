@@ -21,6 +21,7 @@ public sealed class MainForm : Form
     private readonly TextBox _proxyUser = new();
     private readonly TextBox _proxyPassword = new();
     private readonly CheckBox _proxyHttp = new();
+    private readonly TextBox _apiToken = new();
     private readonly CheckBox _fingerprintMobile = new();
     private readonly CheckBox _fingerprintDesktop = new();
     private readonly CheckBox _startup = new();
@@ -44,6 +45,7 @@ public sealed class MainForm : Form
         StartPosition = FormStartPosition.CenterScreen;
 
         BuildUi();
+        _apiToken.Text = _state.ApiToken;
         BuildTray();
         RefreshAccounts();
 
@@ -108,10 +110,47 @@ public sealed class MainForm : Form
             Font = new Font("Segoe UI", 16, FontStyle.Bold)
         });
 
+        var apiPanel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            Height = 54,
+            ColumnCount = 3,
+            RowCount = 1,
+            Padding = new Padding(0, 4, 0, 4)
+        };
+
+        apiPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
+        apiPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        apiPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 105));
+
+        apiPanel.Controls.Add(new Label
+        {
+            Text = "Control API key/token",
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft
+        }, 0, 0);
+
+        _apiToken.Dock = DockStyle.Fill;
+        _apiToken.UseSystemPasswordChar = true;
+        apiPanel.Controls.Add(_apiToken, 1, 0);
+
+        var generateToken = MakeButton("Generate", 95);
+        generateToken.Dock = DockStyle.Fill;
+        generateToken.Click += (_, _) =>
+        {
+            _apiToken.Text = RewardsEnvironment.NewToken();
+            _state.ApiToken = _apiToken.Text;
+            SecureStore.Save(_state);
+            _status.Text = "Status: new API key/token generated and saved";
+        };
+        apiPanel.Controls.Add(generateToken, 2, 0);
+
+        right.Controls.Add(apiPanel);
+
         var grid = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
-            Height = 468,
+            Height = 420,
             ColumnCount = 2,
             RowCount = 13
         };
@@ -150,7 +189,7 @@ public sealed class MainForm : Form
 
         right.Controls.Add(new Label
         {
-            Text = "Account information is stored with Windows user-level encryption. "
+            Text = "API key/token and account information are stored with Windows user-level encryption. "
                  + "Credentials are supplied to the Rewards runtime only when it starts.",
             Dock = DockStyle.Top,
             Height = 48,
@@ -347,6 +386,7 @@ public sealed class MainForm : Form
         _current.RecoveryEmail = _recovery.Text.Trim();
         _current.GeoLocale = string.IsNullOrWhiteSpace(_geo.Text) ? "auto" : _geo.Text.Trim();
         _current.LangCode = string.IsNullOrWhiteSpace(_lang.Text) ? "en" : _lang.Text.Trim();
+        _state.ApiToken = _apiToken.Text.Trim();
         _current.ProxyUrl = _proxy.Text.Trim();
         _current.ProxyPort = (int)_proxyPort.Value;
         _current.ProxyUsername = _proxyUser.Text;
@@ -375,6 +415,17 @@ public sealed class MainForm : Form
         }
 
         ReadFields();
+
+        if (string.IsNullOrWhiteSpace(_state.ApiToken))
+        {
+            MessageBox.Show(
+                "Enter a Control API key/token or click Generate.",
+                "Microsoft Rewards",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            return;
+        }
+
         SecureStore.Save(_state);
         RefreshAccounts();
 
@@ -445,6 +496,17 @@ public sealed class MainForm : Form
     private async Task StartRewardsAsync()
     {
         ReadFields();
+
+        if (string.IsNullOrWhiteSpace(_state.ApiToken))
+        {
+            MessageBox.Show(
+                "Enter a Control API key/token or click Generate before starting Rewards.",
+                "Microsoft Rewards",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            return;
+        }
+
         SecureStore.Save(_state);
 
         try
