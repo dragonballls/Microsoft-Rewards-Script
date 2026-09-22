@@ -105,11 +105,6 @@ public static class RewardsEnvironment
         if (!File.Exists(file))
             return;
 
-        var backup = file + ".legacy-backup";
-
-        if (!File.Exists(backup))
-            File.Copy(file, backup);
-
         var lines = File.ReadAllLines(file)
             .Where(line => !Regex.IsMatch(
                 line,
