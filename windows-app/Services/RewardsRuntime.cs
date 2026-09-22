@@ -25,6 +25,40 @@ public sealed class RewardsRuntime : IDisposable
     private bool _externalApi;
     private bool _externalDashboard;
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(3) };
+    public RewardsRuntime()
+    {
+        var localRoot = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "MicrosoftRewardsApp",
+            "runtime");
+
+        AppDataRoot = localRoot;
+        BotPath = Path.Combine(localRoot, "bot");
+        DashboardPath = Path.Combine(localRoot, "dashboard");
+
+        var packagedNode = Path.Combine(
+            BaseDirectory,
+            "runtime",
+            "node",
+            "node.exe");
+
+        var legacyNode = Path.Combine(
+            BaseDirectory,
+            "runtime",
+            "node.exe");
+
+        NodePath = File.Exists(packagedNode)
+            ? packagedNode
+            : File.Exists(legacyNode)
+                ? legacyNode
+                : FindInstalledNode();
+
+        BrowserPath = Path.Combine(
+            BaseDirectory,
+            "runtime",
+            "browser");
+    }
+
 
     private static string FindInstalledNode()
     {
@@ -179,6 +213,7 @@ public sealed class RewardsRuntime : IDisposable
         var required = new[]
         {
             "package.json",
+            "bundle-version.txt",
             string.Equals(
                 Path.GetFileName(source),
                 "dashboard",
@@ -208,10 +243,20 @@ public sealed class RewardsRuntime : IDisposable
                     ? dv.GetString()
                     : null;
 
+            var sourceBundleVersion =
+                File.ReadAllText(Path.Combine(source, "bundle-version.txt")).Trim();
+
+            var destinationBundleVersion =
+                File.ReadAllText(Path.Combine(destination, "bundle-version.txt")).Trim();
+
             return !string.Equals(
-                sourceVersion,
-                destinationVersion,
-                StringComparison.Ordinal);
+                       sourceVersion,
+                       destinationVersion,
+                       StringComparison.Ordinal) ||
+                   !string.Equals(
+                       sourceBundleVersion,
+                       destinationBundleVersion,
+                       StringComparison.Ordinal);
         }
         catch
         {
@@ -462,295 +507,6 @@ public sealed class RewardsRuntime : IDisposable
         _ownsApi = false;
         _externalDashboard = false;
         _externalApi = false;
-    }
-
-    private static void Kill(ref Process? process)
-    {
-        if (process is null)
-            return;
-
-        try
-        {
-            if (!process.HasExited)
-                process.Kill(entireProcessTree: true);
-        }
-        catch
-        {
-            // Best effort.
-        }
-        finally
-        {
-            process.Dispose();
-            process = null;
-        }
-    }
-
-    public void Dispose()
-    {
-        _http.Dispose();
-
-        if (_ownsDashboard)
-            Kill(ref _dashboard);
-
-        if (_ownsApi)
-            Kill(ref _api);
-    }
-}    public RewardsRuntime()
-    {
-        var localRoot = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "MicrosoftRewardsApp",
-            "runtime");
-
-        AppDataRoot = localRoot;
-
-        BotPath = Path.Combine(localRoot, "bot");
-        DashboardPath = Path.Combine(localRoot, "dashboard");
-
-        var packagedNode = Path.Combine(
-            BaseDirectory, "runtime", "node", "node.exe");
-
-        var legacyNode = Path.Combine(
-            BaseDirectory, "runtime", "node.exe");
-
-        NodePath = File.Exists(packagedNode)
-            ? packagedNode
-            : File.Exists(legacyNode)
-                ? legacyNode
-                : FindInstalledNode();
-
-        BrowserPath = Path.Combine(
-            BaseDirectory, "runtime", "browser");
-    }
-
-    private static string FindInstalledNode()
-    {
-        var candidates = new[]
-        {
-            Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
-                "nodejs", "node.exe"),
-
-            Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
-                "nodejs", "node.exe")
-        };
-
-        return candidates.FirstOrDefault(File.Exists) ?? "";
-    }
-
-    public bool ApiRunning => _api is { HasExited: false };
-    public bool DashboardRunning => _dashboard is { HasExited: false };
-
-    public async Task EnsureRunningAsync(
-        AppState state,
-        CancellationToken cancellationToken = default)
-    {
-        if (!File.Exists(NodePath))
-            throw new InvalidOperationException(
-                "Node runtime is missing from the application package.");
-
-        if (!Directory.Exists(BotPath))
-            throw new DirectoryNotFoundException(BotPath);
-
-        if (!Directory.Exists(DashboardPath))
-            throw new DirectoryNotFoundException(DashboardPath);
-
-        var config = Path.Combine(BotPath, "config.json");
-        var example = Path.Combine(BotPath, "config.example.json");
-
-        if (!File.Exists(config) && File.Exists(example))
-            File.Copy(example, config);
-
-        if (!ApiRunning)
-        {
-            if (await IsApiAvailableAsync(state.ApiToken, cancellationToken))
-            {
-                _ownsApi = false;
-            }
-            else
-            {
-                _api = Start(
-                    Path.Combine(BotPath, "scripts", "api", "server.js"),
-                    BotPath,
-                    state,
-                    dashboard: false);
-
-                _ownsApi = true;
-                await WaitForApiAsync(state.ApiToken, cancellationToken);
-            }
-        }
-
-        if (!DashboardRunning)
-        {
-            _dashboard = Start(
-                "server.js",
-                DashboardPath,
-                state,
-                dashboard: true);
-
-            _ownsDashboard = true;
-        }
-    }
-
-    private Process Start(
-        string script,
-        string workingDirectory,
-        AppState state,
-        bool dashboard)
-    {
-        if (!dashboard && !File.Exists(script))
-            throw new FileNotFoundException(
-                "Rewards API server was not found.",
-                script);
-
-        var psi = new ProcessStartInfo
-        {
-            FileName = NodePath,
-            Arguments = $"\"{script}\"",
-            WorkingDirectory = workingDirectory,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            WindowStyle = ProcessWindowStyle.Hidden
-        };
-
-        RewardsEnvironment.Apply(
-            psi,
-            state,
-            BotPath,
-            BrowserPath);
-
-        if (dashboard)
-        {
-            psi.Environment["CONTROL_API_URL"] = "http://127.0.0.1:3010";
-            psi.Environment["CONTROL_API_TOKEN"] = state.ApiToken;
-            psi.Environment["TZ"] = "America/Los_Angeles";
-            psi.Environment["DASHBOARD_TITLE"] = "Microsoft Rewards";
-        }
-
-        return Process.Start(psi)
-            ?? throw new InvalidOperationException(
-                "Unable to start the Rewards runtime.");
-    }
-
-    private async Task<bool> IsApiAvailableAsync(
-        string token,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            using var request = new HttpRequestMessage(
-                HttpMethod.Get,
-                "http://127.0.0.1:3010/health");
-
-            request.Headers.Authorization =
-                new AuthenticationHeaderValue("Bearer", token);
-
-            using var response =
-                await _http.SendAsync(request, cancellationToken);
-
-            return response.IsSuccessStatusCode;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    private async Task WaitForApiAsync(
-        string token,
-        CancellationToken cancellationToken)
-    {
-        for (var attempt = 0; attempt < 20; attempt++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            try
-            {
-                using var request = new HttpRequestMessage(
-                    HttpMethod.Get,
-                    "http://127.0.0.1:3010/health");
-
-                request.Headers.Authorization =
-                    new AuthenticationHeaderValue("Bearer", token);
-
-                using var response =
-                    await _http.SendAsync(request, cancellationToken);
-
-                if (response.IsSuccessStatusCode)
-                    return;
-            }
-            catch
-            {
-                // The API may still be starting.
-            }
-
-            await Task.Delay(500, cancellationToken);
-        }
-
-        throw new TimeoutException(
-            "Rewards Control API did not become ready.");
-    }
-
-    public Task<string> StartRewardsAsync(
-        AppState state,
-        CancellationToken cancellationToken = default) =>
-        SendControlAsync(
-            HttpMethod.Post,
-            "/start",
-            state.ApiToken,
-            cancellationToken);
-
-    public Task<string> StopRewardsAsync(
-        AppState state,
-        CancellationToken cancellationToken = default) =>
-        SendControlAsync(
-            HttpMethod.Post,
-            "/stop",
-            state.ApiToken,
-            cancellationToken);
-
-    private async Task<string> SendControlAsync(
-        HttpMethod method,
-        string path,
-        string token,
-        CancellationToken cancellationToken)
-    {
-        using var request = new HttpRequestMessage(
-            method,
-            "http://127.0.0.1:3010" + path)
-        {
-            Content = new StringContent(
-                "{}",
-                Encoding.UTF8,
-                "application/json")
-        };
-
-        request.Headers.Authorization =
-            new AuthenticationHeaderValue("Bearer", token);
-
-        using var response =
-            await _http.SendAsync(request, cancellationToken);
-
-        var body =
-            await response.Content.ReadAsStringAsync(cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException(body);
-
-        return body;
-    }
-
-    public void Restart()
-    {
-        if (_ownsDashboard)
-            Kill(ref _dashboard);
-
-        if (_ownsApi)
-            Kill(ref _api);
-
-        _ownsDashboard = false;
-        _ownsApi = false;
     }
 
     private static void Kill(ref Process? process)
