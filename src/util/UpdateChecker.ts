@@ -39,8 +39,12 @@ function normalizeVersion(v: string | undefined | null): string {
 
 /** 简单版本比较：a > b 返回正数，a < b 返回负数，相等返回 0 */
 function compareVersions(a: string, b: string): number {
-    const pa = normalizeVersion(a).split('.').map(n => parseInt(n, 10) || 0)
-    const pb = normalizeVersion(b).split('.').map(n => parseInt(n, 10) || 0)
+    const pa = normalizeVersion(a)
+        .split('.')
+        .map(n => parseInt(n, 10) || 0)
+    const pb = normalizeVersion(b)
+        .split('.')
+        .map(n => parseInt(n, 10) || 0)
     for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
         const diff = (pa[i] || 0) - (pb[i] || 0)
         if (diff !== 0) return diff
