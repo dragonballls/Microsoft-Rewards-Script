@@ -46,6 +46,8 @@ class Browser {
 
     async createBrowser(account: Account): Promise<BrowserCreationResult> {
         const headless = this.bot.config.headless
+        const uiLocale = this.bot.accountLocale.locale
+        const uiAcceptLanguage = this.bot.accountLocale.acceptLanguage
 
         const hasProxy = Boolean(account.proxy.url)
 
@@ -77,7 +79,7 @@ class Browser {
             browser = await rebrowser.chromium.launch({
                 headless,
                 ...(proxyConfig && { proxy: proxyConfig }),
-                args: [...Browser.BROWSER_ARGS, ...sandboxArgs, ...certArgs]
+                args: [...Browser.BROWSER_ARGS, '--lang=' + uiLocale, ...sandboxArgs, ...certArgs]
             })
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error)
@@ -130,6 +132,10 @@ class Browser {
                 newContextOptions: {
                     permissions: [],
                     ignoreHTTPSErrors: hasProxy,
+                    locale: uiLocale,
+                    extraHTTPHeaders: {
+                        'Accept-Language': uiAcceptLanguage
+                    },
                     // Restore cookies
                     ...(session?.storageState ? { storageState: session.storageState } : {}),
                     ...(this.bot.isMobile
@@ -194,7 +200,7 @@ class Browser {
             this.bot.logger.info(
                 this.bot.isMobile,
                 'BROWSER',
-                `Created context | locale=${this.bot.accountLocale.locale} | Accept-Language="${this.bot.accountLocale.acceptLanguage}" | User-Agent: "${fingerprint.fingerprint.navigator.userAgent}"`
+                `Created context | rewardsLocale=${this.bot.accountLocale.locale} | uiLocale=${uiLocale} | Accept-Language="${uiAcceptLanguage}" | User-Agent: "${fingerprint.fingerprint.navigator.userAgent}"`
             )
             this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FINGERPRINT', JSON.stringify(fingerprint))
 

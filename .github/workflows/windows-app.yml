@@ -8,6 +8,7 @@ on:
             - windows-app-account-manager
         paths:
             - 'windows-app/**'
+            - 'src/**'
             - '.github/workflows/windows-app.yml'
     pull_request:
         types:
@@ -17,6 +18,9 @@ on:
             - ready_for_review
         paths:
             - 'windows-app/**'
+            - 'src/**'
+            - 'manager/RewardsManager/**'
+            - 'autorun/**'
             - '.github/workflows/windows-app.yml'
 
 permissions:
@@ -55,6 +59,9 @@ jobs:
                   npx patchright install chromium
                   npm run build
 
+                  # The shipped dist does not require devDependencies; remove them before packaging.
+                  npm prune --omit=dev
+
                   New-Item -ItemType Directory -Path staging/bot -Force | Out-Null
                   Copy-Item package.json staging/bot/package.json -Force
                   Copy-Item package-lock.json staging/bot/package-lock.json -Force
@@ -64,6 +71,26 @@ jobs:
                   Copy-Item scripts staging/bot/scripts -Recurse -Force
                   Copy-Item config.example.json staging/bot/config.json -Force
                   Set-Content staging/bot/bundle-version.txt '${{ github.sha }}' -NoNewline
+
+            - name: Test Rewards browser locale
+              shell: pwsh
+              env:
+                  PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/staging/runtime/browser
+                  PATCHRIGHT_BROWSERS_PATH: ${{ github.workspace }}/staging/runtime/browser
+              run: |
+                  $ErrorActionPreference = 'Continue'
+                  node scripts/tests/locale-browser-smoke.cjs *> locale-browser-smoke.log
+                  $code = $LASTEXITCODE
+                  Get-Content locale-browser-smoke.log
+                  exit $code
+
+            - name: Upload locale failure diagnostics
+              if: ${{ always() }}
+              uses: actions/upload-artifact@v4
+              with:
+                  name: locale-browser-smoke-${{ github.run_number }}
+                  path: locale-browser-smoke.log
+                  if-no-files-found: ignore
 
             - name: Build dashboard
               shell: pwsh
@@ -95,16 +122,32 @@ jobs:
 
                   dotnet publish windows-app/MicrosoftRewardsApp.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None --output staging/app
 
+            - name: Publish original desktop manager
+              shell: pwsh
+              run: |
+                  $ErrorActionPreference = 'Stop'
+
+                  dotnet publish manager/RewardsManager/RewardsManager.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None --output staging/manager
+
             - name: Assemble portable application
               shell: pwsh
               run: |
                   $ErrorActionPreference = 'Stop'
 
-                  Copy-Item staging/app/MicrosoftRewardsApp.exe staging/MicrosoftRewardsApp.exe -Force
-                  Remove-Item staging/app -Recurse -Force
-
                   New-Item -ItemType Directory -Path artifact -Force | Out-Null
-                  Copy-Item staging/* artifact -Recurse -Force
+
+                  # Root the bot/runtime files so the original desktop manager sees the same portable layout.
+                  Copy-Item staging/bot/* artifact -Recurse -Force
+                  Copy-Item staging/dashboard artifact/dashboard -Recurse -Force
+                  Copy-Item staging/runtime artifact/runtime -Recurse -Force
+                  Copy-Item autorun artifact/autorun -Recurse -Force
+
+                  # Keep the original desktop manager as the main EXE users launch.
+                  Copy-Item staging/manager/RewardsManager.exe artifact/MicrosoftRewardsApp.exe -Force
+                  Copy-Item staging/manager/RewardsManager.exe artifact/RewardsManager.exe -Force
+
+                  # Retain the newer account-manager build as a separate optional executable.
+                  Copy-Item staging/app/MicrosoftRewardsApp.exe artifact/MicrosoftRewardsAccountManager.exe -Force
 
             - name: Validate application package
               shell: pwsh
@@ -112,19 +155,35 @@ jobs:
                   $ErrorActionPreference = 'Stop'
 
                   if (!(Test-Path artifact/MicrosoftRewardsApp.exe)) {
-                      throw 'MicrosoftRewardsApp.exe was not produced.'
+                      throw 'Main MicrosoftRewardsApp.exe was not produced.'
+                  }
+
+                  if (!(Test-Path artifact/MicrosoftRewardsAccountManager.exe)) {
+                      throw 'Optional MicrosoftRewardsAccountManager.exe was not produced.'
                   }
 
                   if (!(Test-Path artifact/runtime/node/node.exe)) {
                       throw 'Bundled Node runtime is missing.'
                   }
 
-                  if (!(Test-Path artifact/bot/dist/index.js)) {
+                  if (!(Test-Path artifact/package.json)) {
+                      throw 'Root package.json is missing.'
+                  }
+
+                  if (!(Test-Path artifact/dist/index.js)) {
                       throw 'Built Rewards bot is missing.'
                   }
 
-                  if (!(Test-Path artifact/bot/scripts/api/server.js)) {
+                  if (!(Test-Path artifact/scripts/api/server.js)) {
                       throw 'Control API is missing.'
+                  }
+
+                  if (!(Test-Path artifact/autorun/run-rewards.ps1)) {
+                      throw 'Rewards automation script is missing.'
+                  }
+
+                  if (!(Test-Path artifact/RewardsManager.exe)) {
+                      throw 'Original desktop RewardsManager.exe was not produced.'
                   }
 
                   if (!(Test-Path artifact/dashboard/server.js)) {
@@ -137,21 +196,50 @@ jobs:
 
                   & artifact/runtime/node/node.exe --version
 
-            - name: Run integrated application self-test
+            - name: Verify original desktop runtime
               shell: pwsh
               run: |
                   $ErrorActionPreference = 'Stop'
+                  $process = Start-Process -FilePath "$PWD/artifact/RewardsManager.exe" -ArgumentList '--verify-runtime' -PassThru -WindowStyle Hidden
+                  if (!$process.WaitForExit(60000)) {
+                      Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+                      throw 'RewardsManager.exe runtime verification exceeded the 60 second limit.'
+                  }
+                  if ($process.ExitCode -ne 0) {
+                      throw "RewardsManager.exe runtime verification failed with exit code $($process.ExitCode)."
+                  }
 
-                  $process = Start-Process -FilePath "$PWD/artifact/MicrosoftRewardsApp.exe" -ArgumentList '--self-test' -PassThru -WindowStyle Hidden
+            - name: Verify original desktop UI
+              shell: pwsh
+              run: |
+                  $ErrorActionPreference = 'Stop'
+                  $process = Start-Process -FilePath "$PWD/artifact/RewardsManager.exe" -ArgumentList '--verify-switch' -PassThru -WindowStyle Hidden
+                  if (!$process.WaitForExit(60000)) {
+                      Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+                      throw 'RewardsManager.exe UI verification exceeded the 60 second limit.'
+                  }
+                  if ($process.ExitCode -ne 0) {
+                      throw "RewardsManager.exe UI verification failed with exit code $($process.ExitCode)."
+                  }
+
+            - name: Run integrated account-manager self-test
+              shell: pwsh
+              run: |
+                  $ErrorActionPreference = 'Continue'
+
+                  $process = Start-Process -FilePath "$PWD/artifact/MicrosoftRewardsAccountManager.exe" -ArgumentList '--self-test' -PassThru -WindowStyle Hidden -RedirectStandardOutput "$PWD/account-manager-self-test.log" -RedirectStandardError "$PWD/account-manager-self-test.err.log"
 
                   try {
                       if (!$process.WaitForExit(60000)) {
                           Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-                          throw 'MicrosoftRewardsApp.exe self-test exceeded the 60 second limit.'
+                          throw 'MicrosoftRewardsAccountManager.exe self-test exceeded the 60 second limit.'
                       }
 
+                      Get-Content "$PWD/account-manager-self-test.log" -ErrorAction SilentlyContinue
+                      Get-Content "$PWD/account-manager-self-test.err.log" -ErrorAction SilentlyContinue
+
                       if ($process.ExitCode -ne 0) {
-                          throw "MicrosoftRewardsApp.exe self-test failed with exit code $($process.ExitCode)."
+                          throw "MicrosoftRewardsAccountManager.exe self-test failed with exit code $($process.ExitCode)."
                       }
                   }
                   finally {
@@ -160,12 +248,22 @@ jobs:
                       }
                   }
 
-            - name: Verify background startup
+            - name: Upload account-manager self-test diagnostics
+              if: ${{ always() }}
+              uses: actions/upload-artifact@v4
+              with:
+                  name: account-manager-self-test-${{ github.run_number }}
+                  path: |
+                      account-manager-self-test.log
+                      account-manager-self-test.err.log
+                  if-no-files-found: ignore
+
+            - name: Verify account-manager background startup
               shell: pwsh
               run: |
                   $ErrorActionPreference = 'Stop'
 
-                  $process = Start-Process -FilePath "$PWD/artifact/MicrosoftRewardsApp.exe" -ArgumentList '--background' -PassThru -WindowStyle Hidden
+                  $process = Start-Process -FilePath "$PWD/artifact/MicrosoftRewardsAccountManager.exe" -ArgumentList '--background' -PassThru -WindowStyle Hidden
 
                   try {
                       Start-Sleep -Seconds 8

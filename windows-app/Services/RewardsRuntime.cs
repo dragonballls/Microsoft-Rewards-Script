@@ -18,6 +18,11 @@ public sealed class RewardsRuntime : IDisposable
     public string NodePath { get; }
     public string BrowserPath { get; }
 
+    private bool UsesSharedPackagedRoot =>
+        File.Exists(Path.Combine(BaseDirectory, "package.json")) &&
+        File.Exists(Path.Combine(BaseDirectory, "dist", "index.js")) &&
+        File.Exists(Path.Combine(BaseDirectory, "scripts", "api", "server.js"));
+
     private Process? _api;
     private Process? _dashboard;
     private bool _ownsApi;
@@ -34,8 +39,12 @@ public sealed class RewardsRuntime : IDisposable
             "runtime");
 
         AppDataRoot = localRoot;
-        BotPath = Path.Combine(localRoot, "bot");
-        DashboardPath = Path.Combine(localRoot, "dashboard");
+        BotPath = UsesSharedPackagedRoot
+            ? BaseDirectory
+            : Path.Combine(localRoot, "bot");
+        DashboardPath = UsesSharedPackagedRoot
+            ? Path.Combine(BaseDirectory, "dashboard")
+            : Path.Combine(localRoot, "dashboard");
 
         var packagedNode = Path.Combine(
             BaseDirectory,
@@ -171,6 +180,7 @@ public sealed class RewardsRuntime : IDisposable
                     dashboard: true);
 
                 _ownsDashboard = true;
+                await WaitForDashboardAsync(cancellationToken);
             }
         }
     }
@@ -178,6 +188,16 @@ public sealed class RewardsRuntime : IDisposable
     private async Task EnsureWritableRuntimeAsync(
         CancellationToken cancellationToken)
     {
+        if (UsesSharedPackagedRoot)
+        {
+            if (!Directory.Exists(DashboardPath))
+                throw new DirectoryNotFoundException(
+                    "Packaged dashboard is missing.");
+
+            await Task.CompletedTask;
+            return;
+        }
+
         var sourceBot = Path.Combine(BaseDirectory, "bot");
         var sourceDashboard = Path.Combine(BaseDirectory, "dashboard");
 
@@ -367,15 +387,21 @@ public sealed class RewardsRuntime : IDisposable
         AppState state,
         bool dashboard)
     {
-        if (!dashboard && !File.Exists(script))
+        var scriptPath = Path.IsPathRooted(script)
+            ? script
+            : Path.Combine(workingDirectory, script);
+
+        if (!File.Exists(scriptPath))
             throw new FileNotFoundException(
-                "Rewards API server was not found.",
-                script);
+                dashboard
+                    ? "Rewards dashboard server was not found."
+                    : "Rewards API server was not found.",
+                scriptPath);
 
         var psi = new ProcessStartInfo
         {
             FileName = NodePath,
-            Arguments = $"\"{script}\"",
+            Arguments = $"\"{scriptPath}\"",
             WorkingDirectory = workingDirectory,
             UseShellExecute = false,
             CreateNoWindow = true,
@@ -459,6 +485,23 @@ public sealed class RewardsRuntime : IDisposable
 
         throw new TimeoutException(
             "Rewards Control API did not become ready.");
+    }
+
+    private async Task WaitForDashboardAsync(
+        CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; attempt < 20; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (await IsDashboardAvailableAsync(cancellationToken))
+                return;
+
+            await Task.Delay(500, cancellationToken);
+        }
+
+        throw new TimeoutException(
+            "Rewards dashboard did not become ready.");
     }
 
     private async Task<bool> IsDashboardAvailableAsync(

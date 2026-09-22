@@ -1103,6 +1103,7 @@ namespace RewardsManager
         private async System.Threading.Tasks.Task RunVerifySwitch()
         {
             var sb = new StringBuilder();
+            bool failed = false;
             sb.AppendLine($"# verify-switch {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
             try { File.WriteAllText(Path.Combine(Path.GetTempPath(), "precreate.txt"), ""); } catch { }
             for (int t = 0; t < tabs.TabPages.Count; t++)
@@ -1119,13 +1120,17 @@ namespace RewardsManager
                 }
                 catch (Exception ex)
                 {
+                    failed = true;
                     sb.AppendLine($"tab={t} EXCEPTION {ex.GetType().Name}: {ex.Message}");
                 }
             }
             tabs.SelectedIndex = 0;
             await System.Threading.Tasks.Task.Delay(250);
-            try { DumpGeometry(Path.Combine(Path.GetTempPath(), "geometry.txt")); } catch { }
-            try { File.WriteAllText(Path.Combine(Path.GetTempPath(), "switchlog.txt"), sb.ToString()); } catch { }
+            try { DumpGeometry(Path.Combine(Path.GetTempPath(), "geometry.txt")); } catch { /* diagnostic only */ }
+            try { File.WriteAllText(Path.Combine(Path.GetTempPath(), "switchlog.txt"), sb.ToString()); } catch { /* diagnostic only */ }
+
+            // The smoke test is about real tab creation/switching errors, not a DPI-dependent pixel equality.
+            Environment.ExitCode = failed ? 1 : 0;
             Application.Exit();
         }
 

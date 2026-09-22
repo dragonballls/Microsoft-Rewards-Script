@@ -91,6 +91,7 @@ function Find-Node {
     $p = Get-Command node.exe -ErrorAction SilentlyContinue
     if ($p) { return $p.Source }
     $candidates = @(
+        (Join-Path $ProjectDir 'runtime\node\node.exe'),
         (Join-Path $env:LOCALAPPDATA 'nodejs\node.exe'),
         'C:\Program Files\nodejs\node.exe',
         'D:\Program Files\nodejs\node.exe',
@@ -204,8 +205,15 @@ try {
         exit 1
     }
 
-    # 让 patchright/playwright 使用项目内浏览器（与 RewardsManager 环境初始化保持一致）
-    $env:PLAYWRIGHT_BROWSERS_PATH = '0'
+    # 优先使用便携包随附的浏览器；开发目录则回退到 patchright 的项目内浏览器。
+    $packagedBrowserDir = Join-Path $ProjectDir 'runtime\browser'
+    if (Test-Path $packagedBrowserDir) {
+        $env:PLAYWRIGHT_BROWSERS_PATH = $packagedBrowserDir
+        $env:PATCHRIGHT_BROWSERS_PATH = $packagedBrowserDir
+    } else {
+        $env:PLAYWRIGHT_BROWSERS_PATH = '0'
+        $env:PATCHRIGHT_BROWSERS_PATH = '0'
+    }
 
     # 读取自动化设置：通知模式（both=启动+完成 / complete=仅完成 / none=不通知）
     $notifyMode = 'none'

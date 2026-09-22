@@ -131,7 +131,7 @@ public static class RewardsEnvironment
         psi.Environment["API_ALLOW_CONFIG_WRITE"] = "true";
         psi.Environment["API_ALLOW_SCHEDULE_WRITE"] = "true";
         psi.Environment["API_ALLOW_CONFIG_REVEAL"] = "false";
-        psi.Environment["API_CORS_ORIGIN"] = "*";
+        psi.Environment["API_CORS_ORIGIN"] = "http://127.0.0.1:8890";
         if (Directory.Exists(browserPath))
         {
             psi.Environment["PLAYWRIGHT_BROWSERS_PATH"] = browserPath;

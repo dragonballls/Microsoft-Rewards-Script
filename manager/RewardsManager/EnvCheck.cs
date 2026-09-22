@@ -18,7 +18,9 @@ namespace RewardsManager
     internal static class EnvCheck
     {
         /// <summary>项目内便携 Node 目录（无需安装、无需管理员）</summary>
-        public static string ProjectNodeDir => Path.Combine(ProjectPaths.Root, "tools", "node");
+        public static string ProjectNodeDir => File.Exists(Path.Combine(ProjectPaths.Root, "runtime", "node", "node.exe"))
+            ? Path.Combine(ProjectPaths.Root, "runtime", "node")
+            : Path.Combine(ProjectPaths.Root, "tools", "node");
 
         /// <summary>项目内 node.exe 路径</summary>
         public static string ProjectNodeExe => Path.Combine(ProjectNodeDir, "node.exe");
@@ -78,6 +80,17 @@ namespace RewardsManager
         /// <summary>检测 patchright 的 Chromium 是否已下载（依赖 node_modules 已安装）</summary>
         public static bool HasBrowser()
         {
+            var packagedBrowserDir = Path.Combine(ProjectPaths.Root, "runtime", "browser");
+            if (Directory.Exists(packagedBrowserDir))
+            {
+                try
+                {
+                    if (Directory.GetFiles(packagedBrowserDir, "chrome.exe", SearchOption.AllDirectories).Length > 0)
+                        return true;
+                }
+                catch { }
+            }
+
             var node = FindNodePath();
 
             // 1. 优先检查项目内（配合 PLAYWRIGHT_BROWSERS_PATH=0，沙盒/便携环境用）
@@ -127,11 +140,15 @@ namespace RewardsManager
             var pathPrepend = Directory.Exists(nodeDir) ? nodeDir : null;
 
             // 非交互 + 把浏览器下载到项目内，避免沙盒/便携环境丢失
+            var packagedBrowserDir = Path.Combine(ProjectPaths.Root, "runtime", "browser");
+            Directory.CreateDirectory(packagedBrowserDir);
+
             var extraEnv = new Dictionary<string, string>
             {
                 ["CI"] = "true",
                 ["npm_config_yes"] = "true",
-                ["PLAYWRIGHT_BROWSERS_PATH"] = "0"
+                ["PLAYWRIGHT_BROWSERS_PATH"] = packagedBrowserDir,
+                ["PATCHRIGHT_BROWSERS_PATH"] = packagedBrowserDir
             };
 
             onOutput(">>> npm install");
@@ -151,7 +168,8 @@ namespace RewardsManager
             if (!HasBrowser())
             {
                 onOutput("[错误] 浏览器内核下载后校验失败，请尝试手动运行：");
-                onOutput("  set PLAYWRIGHT_BROWSERS_PATH=0");
+                onOutput($"  set PLAYWRIGHT_BROWSERS_PATH={packagedBrowserDir}");
+                onOutput($"  set PATCHRIGHT_BROWSERS_PATH={packagedBrowserDir}");
                 onOutput("  npx patchright install chromium");
                 return 1;
             }
