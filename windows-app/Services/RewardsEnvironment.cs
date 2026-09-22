@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -10,30 +11,37 @@ public static class RewardsEnvironment
     private static string Unquote(string value)
     {
         value = value.Trim();
+
         if (value.Length >= 2 && value[0] == '"' && value[^1] == '"')
         {
             value = value[1..^1]
-                .Replace("\\", "\")
-                .Replace("\"", """)
-                .Replace("\r", "\r")
-                .Replace("\n", "\n");
+                .Replace("\\\\", "\\")
+                .Replace("\\\"", "\"")
+                .Replace("\\r", "\r")
+                .Replace("\\n", "\n");
         }
+
         return value;
     }
 
     private static Dictionary<string, string> ParseEnv(string file)
     {
         var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
         if (!File.Exists(file))
             return values;
 
         foreach (var raw in File.ReadAllLines(file))
         {
             var line = raw.Trim();
+
             if (line.Length == 0 || line.StartsWith('#'))
                 continue;
 
-            var match = Regex.Match(line, @"^([A-Za-z_][A-Za-z0-9_]*)s*=s*(.*)$");
+            var match = Regex.Match(
+                line,
+                @"^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$");
+
             if (match.Success)
                 values[match.Groups[1].Value] = Unquote(match.Groups[2].Value);
         }
@@ -44,9 +52,13 @@ public static class RewardsEnvironment
     public static List<AccountProfile> ImportFromEnv(string file)
     {
         var env = ParseEnv(file);
+
         var indexes = env.Keys
-            .Select(k => Regex.Match(k, @"^ACCOUNT_(d+)_EMAIL$", RegexOptions.IgnoreCase))
-            .Where(m => m.Success && int.TryParse(m.Groups[1].Value, out _))
+            .Select(k => Regex.Match(
+                k,
+                @"^ACCOUNT_(\d+)_EMAIL$",
+                RegexOptions.IgnoreCase))
+            .Where(m => m.Success)
             .Select(m => int.Parse(m.Groups[1].Value))
             .Distinct()
             .OrderBy(x => x)
@@ -57,7 +69,9 @@ public static class RewardsEnvironment
         foreach (var index in indexes)
         {
             string Get(string suffix, string fallback = "") =>
-                env.TryGetValue($"ACCOUNT_{index}_{suffix}", out var value) ? value : fallback;
+                env.TryGetValue($"ACCOUNT_{index}_{suffix}", out var value)
+                    ? value
+                    : fallback;
 
             _ = int.TryParse(Get("PROXY_PORT"), out var proxyPort);
 
@@ -89,20 +103,29 @@ public static class RewardsEnvironment
             return;
 
         var backup = file + ".legacy-backup";
+
         if (!File.Exists(backup))
             File.Copy(file, backup);
 
         var lines = File.ReadAllLines(file)
-            .Where(line =>
-                !Regex.IsMatch(line, @"^s*ACCOUNT_d+_", RegexOptions.IgnoreCase))
-            .Where(line =>
-                !Regex.IsMatch(line, @"^s*API_TOKENs*=", RegexOptions.IgnoreCase))
+            .Where(line => !Regex.IsMatch(
+                line,
+                @"^\s*ACCOUNT_\d+_",
+                RegexOptions.IgnoreCase))
+            .Where(line => !Regex.IsMatch(
+                line,
+                @"^\s*API_TOKEN\s*=",
+                RegexOptions.IgnoreCase))
             .ToList();
 
         File.WriteAllLines(file, lines, new UTF8Encoding(false));
     }
 
-    public static void Apply(ProcessStartInfo psi, AppState state, string botPath, string browserPath)
+    public static void Apply(
+        ProcessStartInfo psi,
+        AppState state,
+        string botPath,
+        string browserPath)
     {
         psi.Environment["API_HOST"] = "127.0.0.1";
         psi.Environment["API_PORT"] = "3010";
@@ -130,7 +153,10 @@ public static class RewardsEnvironment
         }
     }
 
-    private static void Set(ProcessStartInfo psi, string key, string value)
+    private static void Set(
+        ProcessStartInfo psi,
+        string key,
+        string value)
     {
         if (!string.IsNullOrEmpty(value))
             psi.Environment[key] = value;
