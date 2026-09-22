@@ -19,6 +19,9 @@ public sealed class MainForm : Form
     private readonly NumericUpDown _proxyPort = new();
     private readonly TextBox _proxyUser = new();
     private readonly TextBox _proxyPassword = new();
+    private readonly CheckBox _proxyHttp = new();
+    private readonly CheckBox _fingerprintMobile = new();
+    private readonly CheckBox _fingerprintDesktop = new();
     private readonly CheckBox _startup = new();
     private readonly Label _status = new();
     private readonly NotifyIcon _tray = new();
@@ -107,9 +110,9 @@ public sealed class MainForm : Form
         var grid = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
-            Height = 360,
+            Height = 468,
             ColumnCount = 2,
-            RowCount = 10
+            RowCount = 13
         };
 
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
@@ -129,6 +132,14 @@ public sealed class MainForm : Form
 
         AddRow(grid, 8, "Proxy username", _proxyUser);
         AddRow(grid, 9, "Proxy password", _proxyPassword);
+
+        _proxyHttp.Text = "Use HTTP proxy";
+        _fingerprintMobile.Text = "Save mobile fingerprint";
+        _fingerprintDesktop.Text = "Save desktop fingerprint";
+
+        AddRow(grid, 10, "Proxy type", _proxyHttp);
+        AddRow(grid, 11, "Fingerprint", _fingerprintMobile);
+        AddRow(grid, 12, "Fingerprint", _fingerprintDesktop);
 
         _password.UseSystemPasswordChar = true;
         _totp.UseSystemPasswordChar = true;
@@ -280,6 +291,9 @@ public sealed class MainForm : Form
         _proxyPort.Value = Math.Clamp(selected.ProxyPort, 0, 65535);
         _proxyUser.Text = selected.ProxyUsername;
         _proxyPassword.Text = selected.ProxyPassword;
+        _proxyHttp.Checked = selected.ProxyHttp;
+        _fingerprintMobile.Checked = selected.SaveFingerprintMobile;
+        _fingerprintDesktop.Checked = selected.SaveFingerprintDesktop;
     }
 
     private void ClearFields()
@@ -295,6 +309,9 @@ public sealed class MainForm : Form
         _proxyPort.Value = 0;
         _proxyUser.Clear();
         _proxyPassword.Clear();
+        _proxyHttp.Checked = false;
+        _fingerprintMobile.Checked = false;
+        _fingerprintDesktop.Checked = false;
     }
 
     private void AddAccount()
@@ -333,6 +350,9 @@ public sealed class MainForm : Form
         _current.ProxyPort = (int)_proxyPort.Value;
         _current.ProxyUsername = _proxyUser.Text;
         _current.ProxyPassword = _proxyPassword.Text;
+        _current.ProxyHttp = _proxyHttp.Checked;
+        _current.SaveFingerprintMobile = _fingerprintMobile.Checked;
+        _current.SaveFingerprintDesktop = _fingerprintDesktop.Checked;
     }
 
     private void SaveCurrent()
