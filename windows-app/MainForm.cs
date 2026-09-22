@@ -23,6 +23,7 @@ public sealed class MainForm : Form
     private readonly CheckBox _proxyHttp = new();
     private readonly CheckBox _fingerprintMobile = new();
     private readonly CheckBox _fingerprintDesktop = new();
+    private readonly CheckBox _manualAuthenticator = new();
     private readonly CheckBox _startup = new();
     private readonly Label _status = new();
     private readonly NotifyIcon _tray = new();
@@ -113,7 +114,7 @@ public sealed class MainForm : Form
             Dock = DockStyle.Top,
             Height = 468,
             ColumnCount = 2,
-            RowCount = 13
+            RowCount = 14
         };
 
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
@@ -141,6 +142,9 @@ public sealed class MainForm : Form
         AddRow(grid, 10, "Proxy type", _proxyHttp);
         AddRow(grid, 11, "Fingerprint", _fingerprintMobile);
         AddRow(grid, 12, "Fingerprint", _fingerprintDesktop);
+
+        _manualAuthenticator.Text = "Manual Authenticator verification";
+        AddRow(grid, 13, "Login", _manualAuthenticator);
 
         _password.UseSystemPasswordChar = true;
         _totp.UseSystemPasswordChar = true;
@@ -295,6 +299,7 @@ public sealed class MainForm : Form
         _proxyHttp.Checked = selected.ProxyHttp;
         _fingerprintMobile.Checked = selected.SaveFingerprintMobile;
         _fingerprintDesktop.Checked = selected.SaveFingerprintDesktop;
+        _manualAuthenticator.Checked = selected.ManualAuthenticatorVerification;
     }
 
     private void ClearFields()
@@ -313,6 +318,7 @@ public sealed class MainForm : Form
         _proxyHttp.Checked = false;
         _fingerprintMobile.Checked = false;
         _fingerprintDesktop.Checked = false;
+        _manualAuthenticator.Checked = false;
     }
 
     private void AddAccount()
@@ -354,6 +360,7 @@ public sealed class MainForm : Form
         _current.ProxyHttp = _proxyHttp.Checked;
         _current.SaveFingerprintMobile = _fingerprintMobile.Checked;
         _current.SaveFingerprintDesktop = _fingerprintDesktop.Checked;
+        _current.ManualAuthenticatorVerification = _manualAuthenticator.Checked;
     }
 
     private void SaveCurrent()
