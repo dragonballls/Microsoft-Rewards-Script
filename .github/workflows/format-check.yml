@@ -38,70 +38,27 @@ jobs:
             - name: Install dependencies
               run: npm ci --ignore-scripts
 
-            - name: Apply formatting and collect changes
-              id: formatting
+            - name: Check formatting of changed files
               shell: bash
               run: |
-                  npm run format
+                  set -euo pipefail
 
-                  if git diff --quiet; then
-                    echo "changed=false" >> "$GITHUB_OUTPUT"
-                    echo "Formatting is correct." >> "$GITHUB_STEP_SUMMARY"
+                  if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+                    base="${{ github.event.pull_request.base.sha }}"
+                    head="$GITHUB_SHA"
+                  else
+                    base="$(git rev-parse HEAD^)"
+                    head="$GITHUB_SHA"
+                  fi
+
+                  mapfile -t files < <(
+                    git diff --name-only "$base" "$head" --diff-filter=ACMR |
+                      grep -E '\\.(cjs|css|html|js|json|md|mdx|mjs|scss|ts|tsx|yaml|yml)$' || true
+                  )
+
+                  if [ "${#files[@]}" -eq 0 ]; then
+                    echo "No Prettier-supported files changed."
                     exit 0
                   fi
 
-                  echo "changed=true" >> "$GITHUB_OUTPUT"
-                  git diff --no-color > /tmp/formatting.diff
-                  diff_lines=$(wc -l < /tmp/formatting.diff)
-
-                  {
-                    echo "## Formatting changes required"
-                    echo
-                    echo "Run the following command locally, then commit the changes:"
-                    echo
-                    echo '```bash'
-                    echo 'npm run format'
-                    echo '```'
-                    echo
-                    echo "### Suggested diff"
-                    echo
-                    echo '```diff'
-                    sed -n '1,400p' /tmp/formatting.diff
-                    echo '```'
-
-                    if [ "$diff_lines" -gt 400 ]; then
-                      echo
-                      echo "Diff truncated to the first 400 of $diff_lines lines."
-                    fi
-                  } >> "$GITHUB_STEP_SUMMARY"
-
-            - name: Add inline formatting suggestions
-              if: >
-                  steps.formatting.outputs.changed == 'true' &&
-                  github.event_name == 'pull_request' &&
-                  github.event.pull_request.head.repo.full_name == github.repository
-              uses: reviewdog/action-suggester@v1.24.3
-              with:
-                  tool_name: formatter
-                  level: error
-                  filter_mode: diff_context
-
-            - name: Explain fork pull request limitation
-              if: >
-                  steps.formatting.outputs.changed == 'true' &&
-                  github.event_name == 'pull_request' &&
-                  github.event.pull_request.head.repo.full_name != github.repository
-              shell: bash
-              run: |
-                  {
-                    echo
-                    echo "> Inline suggestions were skipped because workflows from fork pull requests receive a read-only token."
-                    echo "> The complete formatting diff is still shown above."
-                  } >> "$GITHUB_STEP_SUMMARY"
-
-            - name: Fail formatting check
-              if: steps.formatting.outputs.changed == 'true'
-              shell: bash
-              run: |
-                  echo "Formatting changes are required. Run 'npm run format' locally."
-                  exit 1
+                  npx prettier --check "${files[@]}"
