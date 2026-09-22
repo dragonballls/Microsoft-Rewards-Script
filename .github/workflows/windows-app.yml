@@ -1,164 +1,115 @@
 name: Windows Rewards App
 
 on:
-    workflow_dispatch:
-    pull_request:
-        types:
-            - opened
-            - synchronize
-            - reopened
-            - ready_for_review
-        paths:
-            - 'windows-app/**'
-            - '.github/workflows/windows-app.yml'
+  workflow_dispatch:
+  workflow_call:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+    paths:
+      - 'windows-app/**'
+      - '.github/workflows/windows-app.yml'
 
 permissions:
-    contents: read
+  contents: read
 
 jobs:
-    build-windows-app:
-        runs-on: windows-latest
-        timeout-minutes: 45
-
-        steps:
-            - name: Check out repository
-              uses: actions/checkout@v4
-
-            - name: Set up .NET
-              uses: actions/setup-dotnet@v4
-              with:
-                  dotnet-version: '8.0.x'
-
-            - name: Set up Node.js
-              uses: actions/setup-node@v4
-              with:
-                  node-version: '24.x'
-
-            - name: Build Rewards bot
-              shell: pwsh
-              env:
-                  PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/staging/runtime/browser
-                  PATCHRIGHT_BROWSERS_PATH: ${{ github.workspace }}/staging/runtime/browser
-              run: |
-                  $ErrorActionPreference = 'Stop'
-
-                  New-Item -ItemType Directory -Path staging/runtime/browser -Force | Out-Null
-
-                  npm ci
-                  npx patchright install chromium
-                  npm run build
-
-                  New-Item -ItemType Directory -Path staging/bot -Force | Out-Null
-                  Copy-Item package.json staging/bot/package.json -Force
-                  Copy-Item package-lock.json staging/bot/package-lock.json -Force
-                  Copy-Item config.example.json staging/bot/config.example.json -Force
-                  Copy-Item dist staging/bot/dist -Recurse -Force
-                  Copy-Item node_modules staging/bot/node_modules -Recurse -Force
-                  Copy-Item scripts staging/bot/scripts -Recurse -Force
-                  Copy-Item config.example.json staging/bot/config.json -Force
-
-            - name: Build dashboard
-              shell: pwsh
-              run: |
-                  $ErrorActionPreference = 'Stop'
-
-                  git clone --depth 1 https://github.com/mgrimace/rewards-dashboard.git dashboard-source
-
-                  New-Item -ItemType Directory -Path staging/dashboard -Force | Out-Null
-                  Copy-Item dashboard-source/rewards-dashboard/* staging/dashboard -Recurse -Force
-
-            - name: Bundle Node runtime
-              shell: pwsh
-              run: |
-                  $ErrorActionPreference = 'Stop'
-
-                  $nodeExe = (Get-Command node.exe).Source
-                  $nodeDir = Split-Path $nodeExe -Parent
-
-                  New-Item -ItemType Directory -Path staging/runtime/node -Force | Out-Null
-                  Copy-Item "$nodeDir/*" staging/runtime/node -Recurse -Force
-
-            - name: Publish Windows application
-              shell: pwsh
-              run: |
-                  $ErrorActionPreference = 'Stop'
-
-                  dotnet publish windows-app/MicrosoftRewardsApp.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None --output staging/app
-
-            - name: Assemble portable application
-              shell: pwsh
-              run: |
-                  $ErrorActionPreference = 'Stop'
-
-                  Copy-Item staging/app/MicrosoftRewardsApp.exe staging/MicrosoftRewardsApp.exe -Force
-                  Remove-Item staging/app -Recurse -Force
-
-                  New-Item -ItemType Directory -Path artifact -Force | Out-Null
-                  Copy-Item staging/* artifact -Recurse -Force
-
-            - name: Validate application package
-              shell: pwsh
-              run: |
-                  $ErrorActionPreference = 'Stop'
-
-                  if (!(Test-Path artifact/MicrosoftRewardsApp.exe)) {
-                      throw 'MicrosoftRewardsApp.exe was not produced.'
-                  }
-
-                  if (!(Test-Path artifact/runtime/node/node.exe)) {
-                      throw 'Bundled Node runtime is missing.'
-                  }
-
-                  if (!(Test-Path artifact/bot/dist/index.js)) {
-                      throw 'Built Rewards bot is missing.'
-                  }
-
-                  if (!(Test-Path artifact/bot/scripts/api/server.js)) {
-                      throw 'Control API is missing.'
-                  }
-
-                  if (!(Test-Path artifact/dashboard/server.js)) {
-                      throw 'Dashboard server is missing.'
-                  }
-
-                  $browserFiles = Get-ChildItem artifact/runtime/browser -Recurse -File -ErrorAction SilentlyContinue
-
-                  if (!$browserFiles) {
-                      throw 'Browser runtime is missing.'
-                  }
-
-                  & artifact/runtime/node/node.exe --version
-
-            - name: Smoke test executable
-              shell: pwsh
-              run: |
-                  $ErrorActionPreference = 'Stop'
-
-                  $process = Start-Process -FilePath "$PWD/artifact/MicrosoftRewardsApp.exe" -ArgumentList '--self-test' -PassThru -WindowStyle Hidden
-
-                  try {
-                      if (!$process.WaitForExit(30000)) {
-                          throw 'MicrosoftRewardsApp.exe self-test timed out.'
-                      }
-
-                      if ($process.ExitCode -ne 0) {
-                          throw "MicrosoftRewardsApp.exe self-test failed with exit code $($process.ExitCode)."
-                      }
-                  }
-                  finally {
-                      if (!$process.HasExited) {
-                          Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-                      }
-                  }
-
-            - name: Zip portable application
-              shell: pwsh
-              run: |
-                  $ErrorActionPreference = 'Stop'
-                  Compress-Archive -Path artifact/* -DestinationPath MicrosoftRewardsApp-Windows-x64.zip -CompressionLevel Optimal
-
-            - name: Upload application artifact
-              uses: actions/upload-artifact@v4
-              with:
-                  name: MicrosoftRewardsApp-Windows-x64
-                  path: MicrosoftRewardsApp-Windows-x64.zip
+  build-windows-app:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.x'
+      - name: Build Rewards desktop payload
+        shell: pwsh
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: '0'
+          PATCHRIGHT_BROWSERS_PATH: '0'
+        run: |
+          $ErrorActionPreference = 'Stop'
+          npm ci
+          npx patchright install chromium
+          npm run build
+          New-Item -ItemType Directory -Path staging/root -Force | Out-Null
+          Copy-Item package.json staging/root/package.json -Force
+          Copy-Item package-lock.json staging/root/package-lock.json -Force
+          Copy-Item config.example.json staging/root/config.example.json -Force
+          Copy-Item dist staging/root/dist -Recurse -Force
+          Copy-Item node_modules staging/root/node_modules -Recurse -Force
+          Copy-Item scripts staging/root/scripts -Recurse -Force
+          Copy-Item autorun staging/root/autorun -Recurse -Force
+          Set-Content staging/root/bundle-version.txt '${{ github.sha }}' -NoNewline
+      - name: Bundle Node runtime
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $nodeExe = (Get-Command node.exe).Source
+          $nodeDir = Split-Path $nodeExe -Parent
+          New-Item -ItemType Directory -Path staging/root/tools/node -Force | Out-Null
+          Copy-Item "$nodeDir/*" staging/root/tools/node -Recurse -Force
+      - name: Publish desktop application
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet publish windows-app/MicrosoftRewardsApp.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None --output staging/app
+      - name: Assemble portable application
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Path artifact -Force | Out-Null
+          Copy-Item staging/root/* artifact -Recurse -Force
+          Copy-Item staging/app/MicrosoftRewardsApp.exe artifact/MicrosoftRewardsApp.exe -Force
+      - name: Validate application package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $required = @(
+            'artifact/MicrosoftRewardsApp.exe',
+            'artifact/package.json',
+            'artifact/dist/index.js',
+            'artifact/scripts/api/server.js',
+            'artifact/autorun/run-manual.bat',
+            'artifact/tools/node/node.exe',
+            'artifact/node_modules/patchright-core/.local-browsers'
+          )
+          foreach ($path in $required) { if (!(Test-Path $path)) { throw "Required packaged path is missing: $path" } }
+          & artifact/tools/node/node.exe --version
+      - name: Run integrated desktop self-test
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $process = Start-Process -FilePath "$PWD/artifact/MicrosoftRewardsApp.exe" -ArgumentList '--self-test' -PassThru -WindowStyle Hidden
+          try {
+            if (!$process.WaitForExit(60000)) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue; throw 'Desktop self-test exceeded the 60 second limit.' }
+            if ($process.ExitCode -ne 0) { throw "Desktop self-test failed with exit code $($process.ExitCode)." }
+          } finally { if (!$process.HasExited) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue } }
+      - name: Verify desktop UI construction
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $process = Start-Process -FilePath "$PWD/artifact/MicrosoftRewardsApp.exe" -ArgumentList '--verify-ui' -PassThru -WindowStyle Hidden
+          try {
+            if (!$process.WaitForExit(60000)) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue; throw 'Desktop UI verification exceeded the 60 second limit.' }
+            if ($process.ExitCode -ne 0) { throw "Desktop UI verification failed with exit code $($process.ExitCode)." }
+          } finally { if (!$process.HasExited) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue } }
+      - name: Zip portable application
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Compress-Archive -Path artifact/* -DestinationPath MicrosoftRewardsApp-Windows-x64.zip -CompressionLevel Optimal
+      - name: Upload application artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MicrosoftRewardsApp-Windows-x64
+          path: MicrosoftRewardsApp-Windows-x64.zip
