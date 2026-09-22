@@ -24,6 +24,6 @@ The CI workflow produces a Windows x64 portable package containing:
 - the Node.js runtime;
 - the Chromium browser runtime.
 
-The package is tested with the application's built-in `--self-test` command before the artifact is uploaded.
+The package is tested with the application's built-in `--self-test` command and hidden background-start check before the artifact is uploaded.
 
 All packaged components are validated before artifact upload.
