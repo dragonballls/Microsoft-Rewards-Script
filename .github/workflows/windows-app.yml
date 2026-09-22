@@ -8,6 +8,15 @@ on:
         paths:
             - 'windows-app/**'
             - '.github/workflows/windows-app.yml'
+    pull_request:
+        types:
+            - opened
+            - synchronize
+            - reopened
+            - ready_for_review
+        paths:
+            - 'windows-app/**'
+            - '.github/workflows/windows-app.yml'
 
 permissions:
     contents: read
