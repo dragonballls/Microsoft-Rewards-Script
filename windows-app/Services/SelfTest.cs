@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using MicrosoftRewardsApp.Models;
 
 namespace MicrosoftRewardsApp.Services;
@@ -71,10 +72,40 @@ public static class SelfTest
 
             Assert(apiResponse.IsSuccessStatusCode, "authenticated Control API health");
 
+            using var accountsRequest = new HttpRequestMessage(
+                HttpMethod.Get,
+                "http://127.0.0.1:3010/accounts");
+
+            accountsRequest.Headers.Authorization =
+                new AuthenticationHeaderValue("Bearer", loaded.ApiToken);
+
+            using var accountsResponse =
+                await http.SendAsync(accountsRequest);
+
+            Assert(accountsResponse.IsSuccessStatusCode, "authenticated account list");
+
+            using var accountsJson =
+                JsonDocument.Parse(await accountsResponse.Content.ReadAsStringAsync());
+
+            var returnedAccounts = accountsJson.RootElement
+                .GetProperty("accounts")
+                .EnumerateArray()
+                .ToList();
+
+            Assert(
+                returnedAccounts.Count == 1 &&
+                returnedAccounts[0].GetProperty("email").GetString() == testAccount.Email,
+                "account propagation to Control API");
+
             using var dashboardResponse =
                 await http.GetAsync("http://127.0.0.1:8890/");
 
             Assert(dashboardResponse.IsSuccessStatusCode, "dashboard HTTP response");
+
+            using var dashboardHealth =
+                await http.GetAsync("http://127.0.0.1:8890/api/health");
+
+            Assert(dashboardHealth.IsSuccessStatusCode, "dashboard API health");
             Assert(runtime.DashboardRunning, "dashboard process");
 
             Console.WriteLine("SELF_TEST_PASS encrypted-store");
