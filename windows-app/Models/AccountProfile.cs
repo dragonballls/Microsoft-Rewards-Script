@@ -16,6 +16,7 @@ public sealed class AccountProfile
     public bool ProxyHttp { get; set; }
     public bool SaveFingerprintMobile { get; set; }
     public bool SaveFingerprintDesktop { get; set; }
+    public bool ManualAuthenticatorVerification { get; set; }
 
     public override string ToString() =>
         string.IsNullOrWhiteSpace(Email) ? $"Account {Index}" : Email;
