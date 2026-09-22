@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Microsoft.Win32;
+using Microsoft.Web.WebView2.WinForms;
 using MicrosoftRewardsApp.Models;
 using MicrosoftRewardsApp.Services;
 
@@ -28,6 +29,8 @@ public sealed class MainForm : Form
     private readonly Label _status = new();
     private readonly NotifyIcon _tray = new();
     private readonly System.Windows.Forms.Timer _monitor = new() { Interval = 5000 };
+    private readonly WebView2 _dashboardView = new() { Dock = DockStyle.Fill };
+    private readonly TabControl _tabs = new() { Dock = DockStyle.Fill };
 
     private AccountProfile? _current;
     private bool _allowClose;
@@ -64,6 +67,7 @@ public sealed class MainForm : Form
         {
             WindowsStartup.SetEnabled(_state.StartWithWindows);
             await EnsureServicesAsync();
+            await InitializeDashboardAsync();
 
             if (startHidden)
                 HideToTray();
@@ -220,7 +224,7 @@ public sealed class MainForm : Form
         stop.Click += async (_, _) => await StopRewardsAsync();
 
         var dashboard = MakeButton("Open Dashboard", 135);
-        dashboard.Click += (_, _) => OpenDashboard();
+        dashboard.Click += async (_, _) => await ShowDashboardAsync();
 
         buttons.Controls.Add(save);
         buttons.Controls.Add(delete);
@@ -235,8 +239,16 @@ public sealed class MainForm : Form
         _status.Font = new Font("Segoe UI", 10, FontStyle.Bold);
         right.Controls.Add(_status);
 
-        Controls.Add(right);
-        Controls.Add(left);
+        var settingsTab = new TabPage("Account Setup");
+        settingsTab.Controls.Add(right);
+        settingsTab.Controls.Add(left);
+
+        var dashboardTab = new TabPage("Dashboard");
+        dashboardTab.Controls.Add(_dashboardView);
+
+        _tabs.TabPages.Add(dashboardTab);
+        _tabs.TabPages.Add(settingsTab);
+        Controls.Add(_tabs);
     }
 
     private static Button MakeButton(string text, int width) =>
@@ -277,7 +289,7 @@ public sealed class MainForm : Form
         stop.Click += async (_, _) => await StopRewardsAsync();
 
         var dashboard = new ToolStripMenuItem("Open Dashboard");
-        dashboard.Click += (_, _) => OpenDashboard();
+        dashboard.Click += async (_, _) => await ShowDashboardAsync();
 
         var exit = new ToolStripMenuItem("Exit");
         exit.Click += (_, _) =>
@@ -414,6 +426,16 @@ public sealed class MainForm : Form
             return;
         }
 
+        if (string.IsNullOrWhiteSpace(_password.Text))
+        {
+            MessageBox.Show(
+                "Enter the Microsoft account password before saving.",
+                "Microsoft Rewards",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            return;
+        }
+
         ReadFields();
 
         if (string.IsNullOrWhiteSpace(_state.ApiToken))
@@ -507,6 +529,40 @@ public sealed class MainForm : Form
             return;
         }
 
+        var incomplete = _state.Accounts
+            .Where(a => !string.IsNullOrWhiteSpace(a.Email) &&
+                        string.IsNullOrWhiteSpace(a.Password))
+            .OrderBy(a => a.Index)
+            .ToList();
+
+        if (incomplete.Count > 0)
+        {
+            var first = incomplete[0];
+            var selected = _state.Accounts.FirstOrDefault(a => a.Index == first.Index);
+            if (selected is not null)
+                _accounts.SelectedItem = selected;
+
+            MessageBox.Show(
+                $"ACCOUNT_{first.Index} has an email but no password. Enter the password in Account Setup and save it before starting Rewards.",
+                "Microsoft Rewards",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            _tabs.SelectedIndex = 1;
+            return;
+        }
+
+        if (!_state.Accounts.Any(a => !string.IsNullOrWhiteSpace(a.Email) &&
+                                      !string.IsNullOrWhiteSpace(a.Password)))
+        {
+            MessageBox.Show(
+                "Add a Microsoft Rewards account with both email and password before starting Rewards.",
+                "Microsoft Rewards",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            _tabs.SelectedIndex = 1;
+            return;
+        }
+
         SecureStore.Save(_state);
 
         try
@@ -534,17 +590,28 @@ public sealed class MainForm : Form
         }
     }
 
-    private void OpenDashboard()
+    private async Task InitializeDashboardAsync()
     {
         try
         {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = "http://127.0.0.1:8890/#config",
-                UseShellExecute = true
-            });
+            await _dashboardView.EnsureCoreWebView2Async();
+            _dashboardView.CoreWebView2.Navigate("http://127.0.0.1:8890/");
+            _status.Text = "Status: dashboard embedded and ready";
         }
-        catch { }
+        catch (Exception ex)
+        {
+            _status.Text = $"Status: embedded dashboard unavailable • {ex.Message}";
+        }
+    }
+
+    private async Task ShowDashboardAsync()
+    {
+        _tabs.SelectedIndex = 0;
+
+        if (_dashboardView.CoreWebView2 is null)
+            await InitializeDashboardAsync();
+        else
+            _dashboardView.CoreWebView2.Navigate("http://127.0.0.1:8890/");
     }
 
     private void HideToTray()
