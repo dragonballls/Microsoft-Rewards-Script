@@ -25,6 +25,7 @@ public sealed class RewardsRuntime : IDisposable
     private bool _externalApi;
     private bool _externalDashboard;
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(3) };
+
     public RewardsRuntime()
     {
         var localRoot = Path.Combine(
@@ -91,6 +92,20 @@ public sealed class RewardsRuntime : IDisposable
                 "Node runtime is missing from the application package.");
 
         await EnsureWritableRuntimeAsync(cancellationToken);
+
+        if (_api?.HasExited == true)
+        {
+            _api.Dispose();
+            _api = null;
+            _ownsApi = false;
+        }
+
+        if (_dashboard?.HasExited == true)
+        {
+            _dashboard.Dispose();
+            _dashboard = null;
+            _ownsDashboard = false;
+        }
 
         var config = Path.Combine(BotPath, "config.json");
         var example = Path.Combine(BotPath, "config.example.json");
