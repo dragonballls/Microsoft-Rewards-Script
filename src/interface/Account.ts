@@ -7,6 +7,7 @@ export interface Account {
     langCode: string
     proxy: AccountProxy
     saveFingerprint: ConfigSaveFingerprint
+    manualAuthenticatorVerification: boolean
 }
 
 export interface AccountProxy {
