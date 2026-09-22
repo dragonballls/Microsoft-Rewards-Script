@@ -10,6 +10,7 @@ on:
             - ready_for_review
         paths:
             - 'windows-app/**'
+            - 'src/**'
             - '.github/workflows/windows-app.yml'
 
 permissions:
