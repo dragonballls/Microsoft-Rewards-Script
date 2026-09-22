@@ -291,6 +291,12 @@ jobs:
                   $ErrorActionPreference = 'Stop'
                   Compress-Archive -Path artifact/* -DestinationPath MicrosoftRewardsApp-Windows-x64.zip -CompressionLevel Optimal
 
+            - name: Upload main English EXE
+              uses: actions/upload-artifact@v4
+              with:
+                  name: MicrosoftRewardsApp-EXE
+                  path: artifact/MicrosoftRewardsApp.exe
+
             - name: Upload application artifact
               uses: actions/upload-artifact@v4
               with:
