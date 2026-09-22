@@ -142,12 +142,12 @@ jobs:
                   Copy-Item staging/runtime artifact/runtime -Recurse -Force
                   Copy-Item autorun artifact/autorun -Recurse -Force
 
-                  # Keep the original desktop manager as the main EXE users launch.
-                  Copy-Item staging/manager/RewardsManager.exe artifact/MicrosoftRewardsApp.exe -Force
-                  Copy-Item staging/manager/RewardsManager.exe artifact/RewardsManager.exe -Force
-
-                  # Retain the newer account-manager build as a separate optional executable.
+                  # Ship the English Windows app as the main executable users launch.
+                  Copy-Item staging/app/MicrosoftRewardsApp.exe artifact/MicrosoftRewardsApp.exe -Force
                   Copy-Item staging/app/MicrosoftRewardsApp.exe artifact/MicrosoftRewardsAccountManager.exe -Force
+
+                  # Retain the original four-tab desktop manager as an optional executable.
+                  Copy-Item staging/manager/RewardsManager.exe artifact/RewardsManager.exe -Force
 
             - name: Validate application package
               shell: pwsh
@@ -155,7 +155,7 @@ jobs:
                   $ErrorActionPreference = 'Stop'
 
                   if (!(Test-Path artifact/MicrosoftRewardsApp.exe)) {
-                      throw 'Main MicrosoftRewardsApp.exe was not produced.'
+                      throw 'Main English MicrosoftRewardsApp.exe was not produced.'
                   }
 
                   if (!(Test-Path artifact/MicrosoftRewardsAccountManager.exe)) {
@@ -222,12 +222,12 @@ jobs:
                       throw "RewardsManager.exe UI verification failed with exit code $($process.ExitCode)."
                   }
 
-            - name: Run integrated account-manager self-test
+            - name: Run integrated English app self-test
               shell: pwsh
               run: |
                   $ErrorActionPreference = 'Continue'
 
-                  $process = Start-Process -FilePath "$PWD/artifact/MicrosoftRewardsAccountManager.exe" -ArgumentList '--self-test' -PassThru -WindowStyle Hidden -RedirectStandardOutput "$PWD/account-manager-self-test.log" -RedirectStandardError "$PWD/account-manager-self-test.err.log"
+                  $process = Start-Process -FilePath "$PWD/artifact/MicrosoftRewardsApp.exe" -ArgumentList '--self-test' -PassThru -WindowStyle Hidden -RedirectStandardOutput "$PWD/account-manager-self-test.log" -RedirectStandardError "$PWD/account-manager-self-test.err.log"
 
                   try {
                       if (!$process.WaitForExit(60000)) {
@@ -263,7 +263,7 @@ jobs:
               run: |
                   $ErrorActionPreference = 'Stop'
 
-                  $process = Start-Process -FilePath "$PWD/artifact/MicrosoftRewardsAccountManager.exe" -ArgumentList '--background' -PassThru -WindowStyle Hidden
+                  $process = Start-Process -FilePath "$PWD/artifact/MicrosoftRewardsApp.exe" -ArgumentList '--background' -PassThru -WindowStyle Hidden
 
                   try {
                       Start-Sleep -Seconds 8
