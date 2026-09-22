@@ -1075,7 +1075,7 @@ namespace RewardsManager
         private readonly bool verifyMode;
         private readonly bool verifySwitchMode;
 
-        private void DumpGeometry(string path)
+        private bool DumpGeometry(string path)
         {
             // 注意：工具栏现在嵌套在 logLayout(TableLayoutPanel) 内，
             // 所以 btnTop / logTop 都要加上 logLayout.Top 偏移到 TabPage 坐标系。
@@ -1095,6 +1095,7 @@ namespace RewardsManager
             sb.AppendLine($"logSplit.Top={logSplit.Top} logSplit.Margin.Top={logSplit.Margin.Top}");
             sb.AppendLine($"TOP_GAP={topGap} BOTTOM_GAP={bottomGap} EQUAL={(topGap == bottomGap)}");
             try { File.WriteAllText(path, sb.ToString()); } catch { }
+            return topGap == bottomGap;
         }
 
         // ===== 切页自检（--verify-switch，无 UI）=====
@@ -1103,6 +1104,7 @@ namespace RewardsManager
         private async System.Threading.Tasks.Task RunVerifySwitch()
         {
             var sb = new StringBuilder();
+            bool failed = false;
             sb.AppendLine($"# verify-switch {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
             try { File.WriteAllText(Path.Combine(Path.GetTempPath(), "precreate.txt"), ""); } catch { }
             for (int t = 0; t < tabs.TabPages.Count; t++)
@@ -1119,13 +1121,16 @@ namespace RewardsManager
                 }
                 catch (Exception ex)
                 {
+                    failed = true;
                     sb.AppendLine($"tab={t} EXCEPTION {ex.GetType().Name}: {ex.Message}");
                 }
             }
             tabs.SelectedIndex = 0;
             await System.Threading.Tasks.Task.Delay(250);
-            try { DumpGeometry(Path.Combine(Path.GetTempPath(), "geometry.txt")); } catch { }
-            try { File.WriteAllText(Path.Combine(Path.GetTempPath(), "switchlog.txt"), sb.ToString()); } catch { }
+            var geometryOk = false;
+            try { geometryOk = DumpGeometry(Path.Combine(Path.GetTempPath(), "geometry.txt")); } catch { failed = true; }
+            try { File.WriteAllText(Path.Combine(Path.GetTempPath(), "switchlog.txt"), sb.ToString()); } catch { failed = true; }
+            Environment.ExitCode = failed || !geometryOk ? 1 : 0;
             Application.Exit();
         }
 
