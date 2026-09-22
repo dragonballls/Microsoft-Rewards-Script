@@ -6,8 +6,8 @@ const http = require('node:http')
 const { chromium } = require('patchright')
 const { resolveAccountLocale } = require('../../dist/util/Locale.js')
 
-async function runCase(langCode, geoLocale, expectedLocale) {
-    const accountLocale = resolveAccountLocale({ langCode, geoLocale })
+async function runCase(langCode, geoLocale, expectedLocale, resolvedCountry) {
+    const accountLocale = resolveAccountLocale({ langCode, geoLocale }, resolvedCountry)
     assert.equal(accountLocale.locale, expectedLocale)
     console.log(`LOCALE_CASE_PASS ${langCode}/${geoLocale} -> ${accountLocale.locale}`)
 
@@ -64,8 +64,8 @@ async function main() {
     assert.match(source, /'--lang=' \+ uiLocale/)
     assert.doesNotMatch(source, /--lang=en-US/)
 
-    await runCase('en', 'auto', 'en-US')
-    await runCase('en-GB', 'auto', 'en-GB')
+    await runCase('en', 'auto', 'en-US', 'US')
+    await runCase('en-GB', 'auto', 'en-GB', undefined)
 
     console.log('LOCALE_BROWSER_SMOKE_PASS en-US')
     console.log('LOCALE_BROWSER_SMOKE_PASS en-GB')
