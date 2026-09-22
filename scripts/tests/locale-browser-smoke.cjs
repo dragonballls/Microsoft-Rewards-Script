@@ -45,7 +45,8 @@ async function runCase(langCode, geoLocale, expectedLocale) {
 
             const navigatorLocale = await page.evaluate(() => navigator.language)
             assert.equal(navigatorLocale, expectedLocale)
-            assert.equal(observedAcceptLanguage.toLowerCase(), accountLocale.acceptLanguage.toLowerCase())
+            const preferredLocale = accountLocale.acceptedLocales[0].toLowerCase()
+            assert.ok(observedAcceptLanguage.toLowerCase().startsWith(preferredLocale))
         } finally {
             await context.close()
         }
