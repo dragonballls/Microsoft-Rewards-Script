@@ -38,9 +38,11 @@ public static class SecureStore
             return JsonSerializer.Deserialize<AppState>(json)
                 ?? new AppState();
         }
-        catch
+        catch (Exception ex)
         {
-            return new AppState();
+            throw new InvalidOperationException(
+                "The stored Microsoft Rewards account data could not be decrypted or read.",
+                ex);
         }
     }
 
