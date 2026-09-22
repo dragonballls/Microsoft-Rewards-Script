@@ -49,6 +49,16 @@ export class Login {
         emailIconOld: 'img[data-testid="accessibleImg"][src*="picker_verify_email"]',
         recoveryEmail: '[data-testid="proof-confirmation"]',
         passwordIcon: '[data-testid="tile"]:has(svg path[d*="M11.78 10.22a.75.75"])',
+        authenticatorOption: [
+            '[data-testid="tile"]:has-text("Microsoft Authenticator")',
+            '[data-testid="tile"]:has-text("Authenticator app")',
+            '[data-testid="tile"]:has-text("Authenticator")',
+            'button:has-text("Microsoft Authenticator")',
+            'button:has-text("Authenticator app")',
+            '[role="button"]:has-text("Microsoft Authenticator")',
+            '[role="button"]:has-text("Authenticator app")',
+            'a:has-text("Microsoft Authenticator")'
+        ],
         accountLocked: '#serviceAbuseLandingTitle',
         errorAlert: 'div[role="alert"]',
         passwordEntry: '[data-testid="passwordEntry"]',
@@ -280,6 +290,28 @@ export class Login {
             .catch(() => false)
     }
 
+    private async selectManualAuthenticator(page: Page): Promise<boolean> {
+        for (const selector of this.selectors.authenticatorOption) {
+            try {
+                const found = await page.waitForSelector(selector, { state: 'visible', timeout: 700 }).catch(() => null)
+                if (!found) continue
+
+                await this.bot.browser.utils.ghostClick(page, selector)
+                await this.waitForIdle(page, 'after selecting Microsoft Authenticator')
+                this.bot.logger.info(
+                    this.bot.isMobile,
+                    'LOGIN',
+                    'Microsoft Authenticator verification selected; waiting for manual approval'
+                )
+                return true
+            } catch {
+                // Try the next known Microsoft sign-in variant.
+            }
+        }
+
+        return false
+    }
+
     private async waitForIdle(page: Page, note: string, timeout = 5000): Promise<void> {
         await page.waitForLoadState('networkidle', { timeout }).catch(() => {
             this.bot.logger.debug(this.bot.isMobile, 'LOGIN', `Network idle timeout: ${note}`)
@@ -325,6 +357,32 @@ export class Login {
             }
 
             case 'PASSWORD_INPUT': {
+                if (account.manualAuthenticatorVerification) {
+                    this.bot.logger.info(
+                        this.bot.isMobile,
+                        'LOGIN',
+                        'Manual Authenticator verification enabled; not entering the account password'
+                    )
+
+                    if (await this.selectManualAuthenticator(page)) return true
+
+                    if (
+                        (await this.tryClick(
+                            page,
+                            this.selectors.otherWaysToSignIn,
+                            'Other ways to sign in',
+                            2500
+                        )) ||
+                        (await this.tryClick(page, this.selectors.viewFooter, 'Footer link', 2500))
+                    ) {
+                        return true
+                    }
+
+                    throw new Error(
+                        'Manual Authenticator verification is enabled, but Microsoft did not expose an Authenticator sign-in option.'
+                    )
+                }
+
                 this.bot.logger.info(this.bot.isMobile, 'LOGIN', 'Entering password')
                 await this.emailLogin.enterPassword(page, account.password)
                 await this.waitForIdle(page, 'after password entry')
@@ -436,6 +494,20 @@ export class Login {
             }
 
             case 'SIGN_IN_ANOTHER_WAY': {
+                if (account.manualAuthenticatorVerification) {
+                    this.bot.logger.info(
+                        this.bot.isMobile,
+                        'LOGIN',
+                        'Manual Authenticator verification enabled; selecting Authenticator instead of password'
+                    )
+
+                    if (await this.selectManualAuthenticator(page)) return true
+
+                    throw new Error(
+                        'Manual Authenticator verification is enabled, but the Authenticator option was not available in Microsoft sign-in.'
+                    )
+                }
+
                 this.bot.logger.info(this.bot.isMobile, 'LOGIN', 'Selecting "Use my password"')
                 await this.bot.browser.utils.ghostClick(page, this.selectors.passwordIcon)
                 await this.waitForIdle(page, 'after password icon click')
