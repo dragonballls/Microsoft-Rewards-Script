@@ -70,6 +70,7 @@ jobs:
                   $ErrorActionPreference = 'Stop'
 
                   git clone --depth 1 https://github.com/mgrimace/rewards-dashboard.git dashboard-source
+                  git -C dashboard-source checkout 0afbfe8aebbe37264a47c7db5e28832946b30fea
 
                   New-Item -ItemType Directory -Path staging/dashboard -Force | Out-Null
                   Copy-Item dashboard-source/rewards-dashboard/* staging/dashboard -Recurse -Force
