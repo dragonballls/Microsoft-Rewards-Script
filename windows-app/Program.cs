@@ -72,6 +72,8 @@ internal static class Program
                 "MicrosoftRewards", ".env")
         };
 
+        string? migratedFile = null;
+
         foreach (var file in candidates.Where(File.Exists))
         {
             var imported = RewardsEnvironment.ImportFromEnv(file);
@@ -80,11 +82,17 @@ internal static class Program
             {
                 state.Accounts = imported;
                 state.LegacyBotPath = Path.GetDirectoryName(file);
+                migratedFile = file;
             }
 
             if (string.IsNullOrWhiteSpace(state.ApiToken))
             {
-                state.ApiToken = RewardsEnvironment.GetApiToken(file);
+                var apiToken = RewardsEnvironment.GetApiToken(file);
+                if (!string.IsNullOrWhiteSpace(apiToken))
+                {
+                    state.ApiToken = apiToken;
+                    migratedFile ??= file;
+                }
             }
 
             if (state.Accounts.Count > 0)
@@ -99,13 +107,7 @@ internal static class Program
 
         SecureStore.Save(state);
 
-        foreach (var importedFile in candidates.Where(File.Exists))
-        {
-            if (state.Accounts.Count > 0)
-            {
-                RewardsEnvironment.SanitizeLegacyEnv(importedFile);
-                break;
-            }
-        }
+        if (migratedFile is not null)
+            RewardsEnvironment.SanitizeLegacyEnv(migratedFile);
     }
 }
