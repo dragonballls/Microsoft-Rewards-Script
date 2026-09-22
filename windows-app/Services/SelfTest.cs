@@ -1,0 +1,188 @@
+using System.Net.Http.Headers;
+using System.Text.Json;
+using MicrosoftRewardsApp.Models;
+
+namespace MicrosoftRewardsApp.Services;
+
+public static class SelfTest
+{
+    public static async Task RunAsync()
+    {
+        var state = SecureStore.Load();
+        var originalAccounts = state.Accounts;
+        var originalToken = state.ApiToken;
+
+        var testAccount = new AccountProfile
+        {
+            Index = 1,
+            Email = "self-test@example.invalid",
+            Password = "self-test-password",
+            TotpSecret = "self-test-totp",
+            RecoveryEmail = "recovery@example.invalid",
+            GeoLocale = "auto",
+            LangCode = "en",
+            ProxyUrl = "http://127.0.0.1",
+            ProxyPort = 8080,
+            ProxyUsername = "self-test-user",
+            ProxyPassword = "self-test-proxy-password",
+            ProxyHttp = true,
+            SaveFingerprintMobile = true,
+            SaveFingerprintDesktop = true
+        };
+
+        try
+        {
+            state.ApiToken = RewardsEnvironment.NewToken();
+            state.Accounts = [testAccount];
+
+            SecureStore.Save(state);
+
+            var loaded = SecureStore.Load();
+
+            Assert(loaded.Accounts.Count == 1, "encrypted account count");
+            Assert(loaded.Accounts[0].Email == testAccount.Email, "encrypted email");
+            Assert(loaded.Accounts[0].Password == testAccount.Password, "encrypted password");
+            Assert(loaded.Accounts[0].TotpSecret == testAccount.TotpSecret, "encrypted TOTP");
+            Assert(loaded.Accounts[0].ProxyPassword == testAccount.ProxyPassword, "encrypted proxy password");
+            Assert(loaded.Accounts[0].RecoveryEmail == testAccount.RecoveryEmail, "encrypted recovery email");
+            Assert(loaded.Accounts[0].GeoLocale == testAccount.GeoLocale, "encrypted geo locale");
+            Assert(loaded.Accounts[0].LangCode == testAccount.LangCode, "encrypted language code");
+            Assert(loaded.Accounts[0].ProxyUrl == testAccount.ProxyUrl, "encrypted proxy URL");
+            Assert(loaded.Accounts[0].ProxyPort == testAccount.ProxyPort, "encrypted proxy port");
+            Assert(loaded.Accounts[0].ProxyHttp, "proxy HTTP flag");
+            Assert(loaded.Accounts[0].SaveFingerprintMobile, "mobile fingerprint flag");
+            Assert(loaded.Accounts[0].SaveFingerprintDesktop, "desktop fingerprint flag");
+
+            using var runtime = new RewardsRuntime();
+            await runtime.EnsureRunningAsync(loaded);
+
+            Assert(runtime.ApiRunning, "Control API process");
+
+            using var http = new HttpClient
+            {
+                Timeout = TimeSpan.FromSeconds(5)
+            };
+
+            using var apiRequest = new HttpRequestMessage(
+                HttpMethod.Get,
+                "http://127.0.0.1:3010/health");
+
+            apiRequest.Headers.Authorization =
+                new AuthenticationHeaderValue("Bearer", loaded.ApiToken);
+
+            using var apiResponse =
+                await http.SendAsync(apiRequest);
+
+            Assert(apiResponse.IsSuccessStatusCode, "authenticated Control API health");
+
+            using var unauthorizedRequest = new HttpRequestMessage(
+                HttpMethod.Get,
+                "http://127.0.0.1:3010/health");
+
+            using var unauthorizedResponse =
+                await http.SendAsync(unauthorizedRequest);
+
+            Assert(
+                unauthorizedResponse.StatusCode == System.Net.HttpStatusCode.Unauthorized,
+                "Control API rejects missing authentication");
+
+            using var accountsRequest = new HttpRequestMessage(
+                HttpMethod.Get,
+                "http://127.0.0.1:3010/accounts");
+
+            accountsRequest.Headers.Authorization =
+                new AuthenticationHeaderValue("Bearer", loaded.ApiToken);
+
+            using var accountsResponse =
+                await http.SendAsync(accountsRequest);
+
+            Assert(accountsResponse.IsSuccessStatusCode, "authenticated account list");
+
+            using var accountsJson =
+                JsonDocument.Parse(await accountsResponse.Content.ReadAsStringAsync());
+
+            var returnedAccounts = accountsJson.RootElement
+                .GetProperty("accounts")
+                .EnumerateArray()
+                .ToList();
+
+            Assert(
+                returnedAccounts.Count == 1 &&
+                returnedAccounts[0].GetProperty("email").GetString() == testAccount.Email,
+                "account propagation to Control API");
+
+            using var dashboardResponse =
+                await http.GetAsync("http://127.0.0.1:8890/");
+
+            Assert(dashboardResponse.IsSuccessStatusCode, "dashboard HTTP response");
+
+            using var dashboardHealth =
+                await http.GetAsync("http://127.0.0.1:8890/api/health");
+
+            Assert(dashboardHealth.IsSuccessStatusCode, "dashboard API health");
+
+            var dashboardAccountVisible = false;
+
+            for (var attempt = 0; attempt < 20; attempt++)
+            {
+                using var dashboardAccounts =
+                    await http.GetAsync("http://127.0.0.1:8890/api/accounts?historyDays=0");
+
+                if (dashboardAccounts.IsSuccessStatusCode)
+                {
+                    using var dashboardJson =
+                        JsonDocument.Parse(
+                            await dashboardAccounts.Content.ReadAsStringAsync());
+
+                    var dashboardReturnedAccounts = dashboardJson.RootElement
+                        .GetProperty("accounts")
+                        .EnumerateArray()
+                        .ToList();
+
+                    dashboardAccountVisible = dashboardReturnedAccounts.Any(account =>
+                        account.TryGetProperty("email", out var email) &&
+                        email.GetString() == testAccount.Email);
+
+                    if (dashboardAccountVisible)
+                        break;
+                }
+
+                await Task.Delay(500);
+            }
+
+            Assert(
+                dashboardAccountVisible,
+                "account visibility in dashboard");
+
+            Assert(runtime.DashboardRunning, "dashboard process");
+
+            Console.WriteLine("SELF_TEST_PASS encrypted-store");
+            Console.WriteLine("SELF_TEST_PASS control-api");
+            Console.WriteLine("SELF_TEST_PASS dashboard");
+            Console.WriteLine("SELF_TEST_PASS runtime-processes");
+        }
+        finally
+        {
+            state.Accounts = originalAccounts;
+            state.ApiToken = originalToken;
+
+            try
+            {
+                if (string.IsNullOrWhiteSpace(state.ApiToken))
+                    File.Delete(SecureStore.StateFile);
+                else
+                    SecureStore.Save(state);
+            }
+            catch
+            {
+                try { File.Delete(SecureStore.StateFile); } catch { }
+            }
+        }
+    }
+
+    private static void Assert(bool condition, string name)
+    {
+        if (!condition)
+            throw new InvalidOperationException($"Self-test failed: {name}");
+    }
+}
