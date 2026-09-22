@@ -180,6 +180,7 @@ public sealed class RewardsRuntime : IDisposable
                     dashboard: true);
 
                 _ownsDashboard = true;
+                await WaitForDashboardAsync(cancellationToken);
             }
         }
     }
@@ -386,9 +387,11 @@ public sealed class RewardsRuntime : IDisposable
         AppState state,
         bool dashboard)
     {
-        if (!dashboard && !File.Exists(script))
+        if (!File.Exists(script))
             throw new FileNotFoundException(
-                "Rewards API server was not found.",
+                dashboard
+                    ? "Rewards dashboard server was not found."
+                    : "Rewards API server was not found.",
                 script);
 
         var psi = new ProcessStartInfo
@@ -478,6 +481,23 @@ public sealed class RewardsRuntime : IDisposable
 
         throw new TimeoutException(
             "Rewards Control API did not become ready.");
+    }
+
+    private async Task WaitForDashboardAsync(
+        CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; attempt < 20; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (await IsDashboardAvailableAsync(cancellationToken))
+                return;
+
+            await Task.Delay(500, cancellationToken);
+        }
+
+        throw new TimeoutException(
+            "Rewards dashboard did not become ready.");
     }
 
     private async Task<bool> IsDashboardAvailableAsync(
