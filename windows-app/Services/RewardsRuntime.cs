@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Text.Json;
 using MicrosoftRewardsApp.Models;
 
 namespace MicrosoftRewardsApp.Services;
@@ -21,6 +22,8 @@ public sealed class RewardsRuntime : IDisposable
     private Process? _dashboard;
     private bool _ownsApi;
     private bool _ownsDashboard;
+    private bool _externalApi;
+    private bool _externalDashboard;
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(3) };
 
     private static string FindInstalledNode()
@@ -39,8 +42,11 @@ public sealed class RewardsRuntime : IDisposable
         return candidates.FirstOrDefault(File.Exists) ?? "";
     }
 
-    public bool ApiRunning => _api is { HasExited: false };
-    public bool DashboardRunning => _dashboard is { HasExited: false };
+    public bool ApiRunning =>
+        _api is { HasExited: false } || _externalApi;
+
+    public bool DashboardRunning =>
+        _dashboard is { HasExited: false } || _externalDashboard;
 
     public async Task EnsureRunningAsync(
         AppState state,
@@ -58,12 +64,21 @@ public sealed class RewardsRuntime : IDisposable
         if (!File.Exists(config) && File.Exists(example))
             File.Copy(example, config);
 
+        if (_externalApi &&
+            !await IsApiAvailableAsync(
+                state.ApiToken,
+                cancellationToken))
+        {
+            _externalApi = false;
+        }
+
         if (!ApiRunning)
         {
             if (await IsApiAvailableAsync(
                     state.ApiToken,
                     cancellationToken))
             {
+                _externalApi = true;
                 _ownsApi = false;
             }
             else
@@ -85,15 +100,29 @@ public sealed class RewardsRuntime : IDisposable
             }
         }
 
+        if (_externalDashboard &&
+            !await IsDashboardAvailableAsync(cancellationToken))
+        {
+            _externalDashboard = false;
+        }
+
         if (!DashboardRunning)
         {
-            _dashboard = Start(
-                "server.js",
-                DashboardPath,
-                state,
-                dashboard: true);
+            if (await IsDashboardAvailableAsync(cancellationToken))
+            {
+                _externalDashboard = true;
+                _ownsDashboard = false;
+            }
+            else
+            {
+                _dashboard = Start(
+                    "server.js",
+                    DashboardPath,
+                    state,
+                    dashboard: true);
 
-            _ownsDashboard = true;
+                _ownsDashboard = true;
+            }
         }
     }
 
@@ -115,17 +144,23 @@ public sealed class RewardsRuntime : IDisposable
 
         await Task.Run(() =>
         {
-            SyncApplicationDirectory(
-                sourceBot,
-                BotPath,
-                preserveConfig: true,
-                preserveDataDirectory: false);
+            if (NeedsSync(sourceBot, BotPath))
+            {
+                SyncApplicationDirectory(
+                    sourceBot,
+                    BotPath,
+                    preserveConfig: true,
+                    preserveDataDirectory: false);
+            }
 
-            SyncApplicationDirectory(
-                sourceDashboard,
-                DashboardPath,
-                preserveConfig: false,
-                preserveDataDirectory: true);
+            if (NeedsSync(sourceDashboard, DashboardPath))
+            {
+                SyncApplicationDirectory(
+                    sourceDashboard,
+                    DashboardPath,
+                    preserveConfig: false,
+                    preserveDataDirectory: true);
+            }
         }, cancellationToken);
 
         Directory.CreateDirectory(
@@ -134,6 +169,54 @@ public sealed class RewardsRuntime : IDisposable
                     Environment.SpecialFolder.LocalApplicationData),
                 "MicrosoftRewardsApp",
                 "diagnostics"));
+    }
+
+    private static bool NeedsSync(string source, string destination)
+    {
+        if (!Directory.Exists(destination))
+            return true;
+
+        var required = new[]
+        {
+            "package.json",
+            string.Equals(
+                Path.GetFileName(source),
+                "dashboard",
+                StringComparison.OrdinalIgnoreCase)
+                ? "server.js"
+                : Path.Combine("dist", "index.js")
+        };
+
+        if (required.Any(path => !File.Exists(Path.Combine(destination, path))))
+            return true;
+
+        try
+        {
+            var sourcePackage = JsonDocument.Parse(
+                File.ReadAllText(Path.Combine(source, "package.json")));
+
+            var destinationPackage = JsonDocument.Parse(
+                File.ReadAllText(Path.Combine(destination, "package.json")));
+
+            var sourceVersion =
+                sourcePackage.RootElement.TryGetProperty("version", out var sv)
+                    ? sv.GetString()
+                    : null;
+
+            var destinationVersion =
+                destinationPackage.RootElement.TryGetProperty("version", out var dv)
+                    ? dv.GetString()
+                    : null;
+
+            return !string.Equals(
+                sourceVersion,
+                destinationVersion,
+                StringComparison.Ordinal);
+        }
+        catch
+        {
+            return true;
+        }
     }
 
     private static void SyncApplicationDirectory(
@@ -377,6 +460,8 @@ public sealed class RewardsRuntime : IDisposable
 
         _ownsDashboard = false;
         _ownsApi = false;
+        _externalDashboard = false;
+        _externalApi = false;
     }
 
     private static void Kill(ref Process? process)
