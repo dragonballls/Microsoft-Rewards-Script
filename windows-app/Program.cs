@@ -101,7 +101,11 @@ internal static class Program
 
         foreach (var importedFile in candidates.Where(File.Exists))
         {
-            RewardsEnvironment.SanitizeLegacyEnv(importedFile);
+            if (state.Accounts.Count > 0)
+            {
+                RewardsEnvironment.SanitizeLegacyEnv(importedFile);
+                break;
+            }
         }
     }
 }
