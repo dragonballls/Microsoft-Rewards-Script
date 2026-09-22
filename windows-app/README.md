@@ -25,3 +25,5 @@ The CI workflow produces a Windows x64 portable package containing:
 - the Chromium browser runtime.
 
 The package is tested with the application's built-in `--self-test` command before the artifact is uploaded.
+
+All packaged components are validated before artifact upload.
