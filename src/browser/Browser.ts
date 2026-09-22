@@ -37,7 +37,8 @@ class Browser {
         '--disable-background-networking',
         '--disable-backgrounding-occluded-windows',
         '--disable-renderer-backgrounding',
-        '--disable-component-update'
+        '--disable-component-update',
+        '--lang=en-US'
     ] as const
 
     constructor(bot: MicrosoftRewardsBot) {
@@ -46,6 +47,13 @@ class Browser {
 
     async createBrowser(account: Account): Promise<BrowserCreationResult> {
         const headless = this.bot.config.headless
+        // Keep the Rewards page UI in English when the configured account language is English.
+        // A persisted signed-in session can otherwise retain a stale site-language choice.
+        const uiLocale = this.bot.accountLocale.language === 'en' ? 'en-US' : this.bot.accountLocale.locale
+        const uiAcceptLanguage =
+            this.bot.accountLocale.language === 'en'
+                ? 'en-US,en;q=0.9'
+                : this.bot.accountLocale.acceptLanguage
 
         const hasProxy = Boolean(account.proxy.url)
 
@@ -130,7 +138,10 @@ class Browser {
                 newContextOptions: {
                     permissions: [],
                     ignoreHTTPSErrors: hasProxy,
-                    // Restore cookies
+                    locale: uiLocale,
+                    extraHTTPHeaders: {
+                        'Accept-Language': uiAcceptLanguage
+                    },                    // Restore cookies
                     ...(session?.storageState ? { storageState: session.storageState } : {}),
                     ...(this.bot.isMobile
                         ? {
@@ -194,7 +205,7 @@ class Browser {
             this.bot.logger.info(
                 this.bot.isMobile,
                 'BROWSER',
-                `Created context | locale=${this.bot.accountLocale.locale} | Accept-Language="${this.bot.accountLocale.acceptLanguage}" | User-Agent: "${fingerprint.fingerprint.navigator.userAgent}"`
+                `Created context | rewardsLocale=${this.bot.accountLocale.locale} | uiLocale=${uiLocale} | Accept-Language="${uiAcceptLanguage}" | User-Agent: "${fingerprint.fingerprint.navigator.userAgent}"`
             )
             this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FINGERPRINT', JSON.stringify(fingerprint))
 
