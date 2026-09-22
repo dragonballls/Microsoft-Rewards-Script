@@ -94,11 +94,11 @@ jobs:
             if (!$process.WaitForExit(60000)) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue; throw 'Desktop self-test exceeded the 60 second limit.' }
             if ($process.ExitCode -ne 0) { throw "Desktop self-test failed with exit code $($process.ExitCode)." }
           } finally { if (!$process.HasExited) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue } }
-      - name: Verify desktop UI tabs
+      - name: Verify desktop UI construction
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $process = Start-Process -FilePath "$PWD/artifact/MicrosoftRewardsApp.exe" -ArgumentList '--verify-switch' -PassThru -WindowStyle Hidden
+          $process = Start-Process -FilePath "$PWD/artifact/MicrosoftRewardsApp.exe" -ArgumentList '--verify-ui' -PassThru -WindowStyle Hidden
           try {
             if (!$process.WaitForExit(60000)) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue; throw 'Desktop UI verification exceeded the 60 second limit.' }
             if ($process.ExitCode -ne 0) { throw "Desktop UI verification failed with exit code $($process.ExitCode)." }

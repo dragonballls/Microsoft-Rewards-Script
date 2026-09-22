@@ -1,4 +1,5 @@
 using System.Text;
+using System.Windows.Forms;
 using MicrosoftRewardsApp.Services;
 
 namespace MicrosoftRewardsApp;
@@ -13,6 +14,12 @@ internal static class Program
         if (HasArg(args, "--self-test"))
         {
             SelfTest.RunAsync().GetAwaiter().GetResult();
+            return;
+        }
+
+        if (HasArg(args, "--verify-ui"))
+        {
+            VerifyDesktopUi();
             return;
         }
 
@@ -39,6 +46,32 @@ internal static class Program
         Application.Run(new RewardsManager.MainForm(initialTab, setGap, verify, verifySwitch));
     }
 
+    private static void VerifyDesktopUi()
+    {
+        ApplicationConfiguration.Initialize();
+
+        using var form = new RewardsManager.MainForm();
+        var tabs = form.Controls.OfType<TabControl>().SingleOrDefault();
+
+        if (tabs is null)
+            throw new InvalidOperationException("Desktop UI smoke test failed: TabControl was not created.");
+
+        var names = tabs.TabPages.Cast<TabPage>().Select(tab => tab.Text).ToArray();
+        var expected = new[] { "运行日志", "配置编辑", "自动化设置", "版本更新" };
+
+        if (!names.SequenceEqual(expected))
+        {
+            throw new InvalidOperationException(
+                "Desktop UI smoke test failed. Tabs: " + string.Join(" | ", names));
+        }
+
+        if (tabs.TabPages.Cast<TabPage>().Any(tab => tab.Controls.Count == 0))
+            throw new InvalidOperationException("Desktop UI smoke test failed: an expected tab has no controls.");
+
+        Console.WriteLine("DESKTOP_UI_PASS tab-count=4");
+        Console.WriteLine("DESKTOP_UI_PASS tabs=" + string.Join(" | ", names));
+    }
+
     private static bool HasArg(string[] args, string value)
     {
         return args.Any(x => string.Equals(x, value, StringComparison.OrdinalIgnoreCase));
@@ -52,6 +85,7 @@ internal static class Program
                 continue;
             return int.TryParse(args[i + 1], out var value) ? value : fallback;
         }
+
         return fallback;
     }
 
