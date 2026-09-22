@@ -81,7 +81,7 @@ jobs:
             'artifact/scripts/api/server.js',
             'artifact/autorun/run-manual.bat',
             'artifact/tools/node/node.exe',
-            'artifact/node_modules/.local-browsers'
+            'artifact/node_modules/patchright-core/.local-browsers'
           )
           foreach ($path in $required) { if (!(Test-Path $path)) { throw "Required packaged path is missing: $path" } }
           & artifact/tools/node/node.exe --version

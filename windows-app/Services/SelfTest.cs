@@ -10,7 +10,7 @@ public static class SelfTest
         var root = RewardsManager.ProjectPaths.Root;
         var node = Path.Combine(root, "tools", "node", "node.exe");
         var api = Path.Combine(root, "scripts", "api", "server.js");
-        var browserMarker = Path.Combine(root, "node_modules", ".local-browsers");
+        var browserMarker = Path.Combine(root, "node_modules", "patchright-core", ".local-browsers");
 
         Assert(File.Exists(Path.Combine(root, "package.json")), "desktop package.json");
         Assert(File.Exists(Path.Combine(root, "dist", "index.js")), "built Rewards bot");
