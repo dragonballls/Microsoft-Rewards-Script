@@ -37,8 +37,8 @@ jobs:
             - name: Build Rewards bot
               shell: pwsh
               env:
-                  PLAYWRIGHT_BROWSERS_PATH: \${{ github.workspace }}/staging/runtime/browser
-                  PATCHRIGHT_BROWSERS_PATH: \${{ github.workspace }}/staging/runtime/browser
+                  PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/staging/runtime/browser
+                  PATCHRIGHT_BROWSERS_PATH: ${{ github.workspace }}/staging/runtime/browser
               run: |
                   $ErrorActionPreference = 'Stop'
 
