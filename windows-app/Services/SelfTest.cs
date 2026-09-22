@@ -121,25 +121,37 @@ public static class SelfTest
 
             Assert(dashboardHealth.IsSuccessStatusCode, "dashboard API health");
 
-            await Task.Delay(1500);
+            var dashboardAccountVisible = false;
 
-            using var dashboardAccounts =
-                await http.GetAsync("http://127.0.0.1:8890/api/accounts?historyDays=0");
+            for (var attempt = 0; attempt < 20; attempt++)
+            {
+                using var dashboardAccounts =
+                    await http.GetAsync("http://127.0.0.1:8890/api/accounts?historyDays=0");
 
-            Assert(dashboardAccounts.IsSuccessStatusCode, "dashboard account endpoint");
+                if (dashboardAccounts.IsSuccessStatusCode)
+                {
+                    using var dashboardJson =
+                        JsonDocument.Parse(
+                            await dashboardAccounts.Content.ReadAsStringAsync());
 
-            var dashboardJson =
-                JsonDocument.Parse(await dashboardAccounts.Content.ReadAsStringAsync());
+                    var dashboardReturnedAccounts = dashboardJson.RootElement
+                        .GetProperty("accounts")
+                        .EnumerateArray()
+                        .ToList();
 
-            var dashboardReturnedAccounts = dashboardJson.RootElement
-                .GetProperty("accounts")
-                .EnumerateArray()
-                .ToList();
+                    dashboardAccountVisible = dashboardReturnedAccounts.Any(account =>
+                        account.TryGetProperty("email", out var email) &&
+                        email.GetString() == testAccount.Email);
+
+                    if (dashboardAccountVisible)
+                        break;
+                }
+
+                await Task.Delay(500);
+            }
 
             Assert(
-                dashboardReturnedAccounts.Any(account =>
-                    account.TryGetProperty("email", out var email) &&
-                    email.GetString() == testAccount.Email),
+                dashboardAccountVisible,
                 "account visibility in dashboard");
 
             Assert(runtime.DashboardRunning, "dashboard process");
