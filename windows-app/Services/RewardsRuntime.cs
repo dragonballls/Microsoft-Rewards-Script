@@ -7,7 +7,8 @@ namespace MicrosoftRewardsApp.Services;
 
 public sealed class RewardsRuntime : IDisposable
 {
-    public string BaseDirectory { get; } = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
+    public string BaseDirectory { get; } =
+        AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
 
     public string BotPath { get; }
     public string DashboardPath { get; }
@@ -25,16 +26,24 @@ public sealed class RewardsRuntime : IDisposable
 
         BotPath = Directory.Exists(packagedBot)
             ? packagedBot
-            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                "MicrosoftRewardsFull", "Microsoft-Rewards-Script");
+            : Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                "MicrosoftRewardsFull",
+                "Microsoft-Rewards-Script");
 
         DashboardPath = Directory.Exists(packagedDashboard)
             ? packagedDashboard
-            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                "MicrosoftRewardsFull", "rewards-dashboard", "rewards-dashboard");
+            : Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                "MicrosoftRewardsFull",
+                "rewards-dashboard",
+                "rewards-dashboard");
 
-        var packagedNode = Path.Combine(BaseDirectory, "runtime", "node", "node.exe");
-        var legacyNode = Path.Combine(BaseDirectory, "runtime", "node.exe");
+        var packagedNode = Path.Combine(
+            BaseDirectory, "runtime", "node", "node.exe");
+
+        var legacyNode = Path.Combine(
+            BaseDirectory, "runtime", "node.exe");
 
         NodePath = File.Exists(packagedNode)
             ? packagedNode
@@ -49,8 +58,13 @@ public sealed class RewardsRuntime : IDisposable
     {
         var candidates = new[]
         {
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "nodejs", "node.exe"),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "nodejs", "node.exe")
+            Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                "nodejs", "node.exe"),
+
+            Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+                "nodejs", "node.exe")
         };
 
         return candidates.FirstOrDefault(File.Exists) ?? "";
@@ -59,20 +73,25 @@ public sealed class RewardsRuntime : IDisposable
     public bool ApiRunning => _api is { HasExited: false };
     public bool DashboardRunning => _dashboard is { HasExited: false };
 
-    public async Task EnsureRunningAsync(AppState state, CancellationToken cancellationToken = default)
+    public async Task EnsureRunningAsync(
+        AppState state,
+        CancellationToken cancellationToken = default)
     {
         if (!File.Exists(NodePath))
-            throw new InvalidOperationException("Node runtime is missing from the application package.");
+            throw new InvalidOperationException(
+                "Node runtime is missing from the application package.");
 
-        Directory.CreateDirectory(Path.Combine(Environment.GetFolderPath(
-            Environment.SpecialFolder.LocalApplicationData), "MicrosoftRewardsApp"));
+        if (!Directory.Exists(BotPath))
+            throw new DirectoryNotFoundException(BotPath);
 
-        if (!File.Exists(Path.Combine(BotPath, "config.json")) &&
-            File.Exists(Path.Combine(BotPath, "config.example.json")))
-        {
-            File.Copy(Path.Combine(BotPath, "config.example.json"),
-                Path.Combine(BotPath, "config.json"));
-        }
+        if (!Directory.Exists(DashboardPath))
+            throw new DirectoryNotFoundException(DashboardPath);
+
+        var config = Path.Combine(BotPath, "config.json");
+        var example = Path.Combine(BotPath, "config.example.json");
+
+        if (!File.Exists(config) && File.Exists(example))
+            File.Copy(example, config);
 
         if (!ApiRunning)
         {
@@ -80,7 +99,7 @@ public sealed class RewardsRuntime : IDisposable
                 Path.Combine(BotPath, "scripts", "api", "server.js"),
                 BotPath,
                 state,
-                isDashboard: false);
+                dashboard: false);
 
             await WaitForApiAsync(state.ApiToken, cancellationToken);
         }
@@ -91,7 +110,7 @@ public sealed class RewardsRuntime : IDisposable
                 "server.js",
                 DashboardPath,
                 state,
-                isDashboard: true);
+                dashboard: true);
         }
     }
 
@@ -99,18 +118,17 @@ public sealed class RewardsRuntime : IDisposable
         string script,
         string workingDirectory,
         AppState state,
-        bool isDashboard)
+        bool dashboard)
     {
-        if (!File.Exists(script) && !isDashboard)
-            throw new FileNotFoundException("Rewards API server not found.", script);
-
-        if (!Directory.Exists(workingDirectory))
-            throw new DirectoryNotFoundException(workingDirectory);
+        if (!dashboard && !File.Exists(script))
+            throw new FileNotFoundException(
+                "Rewards API server was not found.",
+                script);
 
         var psi = new ProcessStartInfo
         {
             FileName = NodePath,
-            Arguments = $""{script}"",
+            Arguments = $"\"{script}\"",
             WorkingDirectory = workingDirectory,
             UseShellExecute = false,
             CreateNoWindow = true,
@@ -123,7 +141,7 @@ public sealed class RewardsRuntime : IDisposable
             BotPath,
             BrowserPath);
 
-        if (isDashboard)
+        if (dashboard)
         {
             psi.Environment["CONTROL_API_URL"] = "http://127.0.0.1:3010";
             psi.Environment["CONTROL_API_TOKEN"] = state.ApiToken;
@@ -132,41 +150,62 @@ public sealed class RewardsRuntime : IDisposable
         }
 
         return Process.Start(psi)
-            ?? throw new InvalidOperationException("Unable to start application process.");
+            ?? throw new InvalidOperationException(
+                "Unable to start the Rewards runtime.");
     }
 
-    private async Task WaitForApiAsync(string token, CancellationToken cancellationToken)
+    private async Task WaitForApiAsync(
+        string token,
+        CancellationToken cancellationToken)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, "http://127.0.0.1:3010/health");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-
         for (var attempt = 0; attempt < 20; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
             try
             {
-                using var response = await _http.SendAsync(request, cancellationToken);
+                using var request = new HttpRequestMessage(
+                    HttpMethod.Get,
+                    "http://127.0.0.1:3010/health");
+
+                request.Headers.Authorization =
+                    new AuthenticationHeaderValue("Bearer", token);
+
+                using var response =
+                    await _http.SendAsync(request, cancellationToken);
+
                 if (response.IsSuccessStatusCode)
                     return;
             }
             catch
             {
-                // Retry while the API boots.
+                // The API may still be starting.
             }
 
             await Task.Delay(500, cancellationToken);
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         }
 
-        throw new TimeoutException("Rewards Control API did not become ready.");
+        throw new TimeoutException(
+            "Rewards Control API did not become ready.");
     }
 
-    public async Task<string> StartRewardsAsync(AppState state, CancellationToken cancellationToken = default)
-        => await SendControlAsync(HttpMethod.Post, "/start", state.ApiToken, cancellationToken);
+    public Task<string> StartRewardsAsync(
+        AppState state,
+        CancellationToken cancellationToken = default) =>
+        SendControlAsync(
+            HttpMethod.Post,
+            "/start",
+            state.ApiToken,
+            cancellationToken);
 
-    public async Task<string> StopRewardsAsync(AppState state, CancellationToken cancellationToken = default)
-        => await SendControlAsync(HttpMethod.Post, "/stop", state.ApiToken, cancellationToken);
+    public Task<string> StopRewardsAsync(
+        AppState state,
+        CancellationToken cancellationToken = default) =>
+        SendControlAsync(
+            HttpMethod.Post,
+            "/stop",
+            state.ApiToken,
+            cancellationToken);
 
     private async Task<string> SendControlAsync(
         HttpMethod method,
@@ -178,14 +217,20 @@ public sealed class RewardsRuntime : IDisposable
             method,
             "http://127.0.0.1:3010" + path)
         {
-            Content = new StringContent("{}", Encoding.UTF8, "application/json")
+            Content = new StringContent(
+                "{}",
+                Encoding.UTF8,
+                "application/json")
         };
 
         request.Headers.Authorization =
             new AuthenticationHeaderValue("Bearer", token);
 
-        using var response = await _http.SendAsync(request, cancellationToken);
-        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        using var response =
+            await _http.SendAsync(request, cancellationToken);
+
+        var body =
+            await response.Content.ReadAsStringAsync(cancellationToken);
 
         if (!response.IsSuccessStatusCode)
             throw new InvalidOperationException(body);
@@ -209,7 +254,10 @@ public sealed class RewardsRuntime : IDisposable
             if (!process.HasExited)
                 process.Kill(entireProcessTree: true);
         }
-        catch { }
+        catch
+        {
+            // Best effort.
+        }
         finally
         {
             process.Dispose();
