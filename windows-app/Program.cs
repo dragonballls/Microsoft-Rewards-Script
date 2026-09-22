@@ -23,7 +23,7 @@ internal static class Program
         var runtime = new RewardsRuntime();
         try
         {
-            MigrateLegacyConfiguration(state, runtime);
+            MigrateLegacyConfiguration(state);
 
             if (string.IsNullOrWhiteSpace(state.ApiToken))
             {
@@ -48,8 +48,7 @@ internal static class Program
     }
 
     private static void MigrateLegacyConfiguration(
-        AppState state,
-        RewardsRuntime runtime)
+        AppState state)
     {
         if (state.Accounts.Count > 0 && !string.IsNullOrWhiteSpace(state.ApiToken))
             return;
@@ -100,7 +99,9 @@ internal static class Program
 
         SecureStore.Save(state);
 
-        var activeLegacyEnv = Path.Combine(runtime.BotPath, ".env");
-        RewardsEnvironment.SanitizeLegacyEnv(activeLegacyEnv);
+        foreach (var importedFile in candidates.Where(File.Exists))
+        {
+            RewardsEnvironment.SanitizeLegacyEnv(importedFile);
+        }
     }
 }
