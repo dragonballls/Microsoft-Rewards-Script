@@ -8,6 +8,7 @@ on:
             - windows-app-account-manager
         paths:
             - 'windows-app/**'
+            - 'src/**'
             - '.github/workflows/windows-app.yml'
     pull_request:
         types:
@@ -64,6 +65,15 @@ jobs:
                   Copy-Item scripts staging/bot/scripts -Recurse -Force
                   Copy-Item config.example.json staging/bot/config.json -Force
                   Set-Content staging/bot/bundle-version.txt '${{ github.sha }}' -NoNewline
+
+            - name: Test Rewards browser locale
+              shell: pwsh
+              env:
+                  PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/staging/runtime/browser
+                  PATCHRIGHT_BROWSERS_PATH: ${{ github.workspace }}/staging/runtime/browser
+              run: |
+                  $ErrorActionPreference = 'Stop'
+                  node scripts/tests/locale-browser-smoke.cjs
 
             - name: Build dashboard
               shell: pwsh
