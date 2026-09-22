@@ -7,7 +7,7 @@ const { chromium } = require('patchright')
 const { resolveAccountLocale } = require('../../dist/util/Locale.js')
 
 async function runCase(langCode, geoLocale, expectedLocale) {
-    const accountLocale = resolveAccountLocale({ langCode, geoLocale }, geoLocale === 'auto' ? 'US' : undefined)
+    const accountLocale = resolveAccountLocale({ langCode, geoLocale })
     assert.equal(accountLocale.locale, expectedLocale)
 
     let observedAcceptLanguage = ''
