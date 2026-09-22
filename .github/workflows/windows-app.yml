@@ -6,6 +6,7 @@ on:
     push:
         branches:
             - windows-app-account-manager
+            - windows-app-manual-config
         paths:
             - 'windows-app/**'
             - 'src/**'
@@ -232,14 +233,14 @@ jobs:
                   try {
                       if (!$process.WaitForExit(60000)) {
                           Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-                          throw 'MicrosoftRewardsAccountManager.exe self-test exceeded the 60 second limit.'
+                          throw 'MicrosoftRewardsApp.exe self-test exceeded the 60 second limit.'
                       }
 
                       Get-Content "$PWD/account-manager-self-test.log" -ErrorAction SilentlyContinue
                       Get-Content "$PWD/account-manager-self-test.err.log" -ErrorAction SilentlyContinue
 
                       if ($process.ExitCode -ne 0) {
-                          throw "MicrosoftRewardsAccountManager.exe self-test failed with exit code $($process.ExitCode)."
+                          throw "MicrosoftRewardsApp.exe self-test failed with exit code $($process.ExitCode)."
                       }
                   }
                   finally {
@@ -252,7 +253,7 @@ jobs:
               if: ${{ always() }}
               uses: actions/upload-artifact@v4
               with:
-                  name: account-manager-self-test-${{ github.run_number }}
+                  name: english-app-self-test-${{ github.run_number }}
                   path: |
                       account-manager-self-test.log
                       account-manager-self-test.err.log
