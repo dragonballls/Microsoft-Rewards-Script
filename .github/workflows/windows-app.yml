@@ -128,8 +128,12 @@ jobs:
                   Copy-Item staging/runtime artifact/runtime -Recurse -Force
                   Copy-Item autorun artifact/autorun -Recurse -Force
 
-                  Copy-Item staging/app/MicrosoftRewardsApp.exe artifact/MicrosoftRewardsApp.exe -Force
+                  # Keep the original desktop manager as the main EXE users launch.
+                  Copy-Item staging/manager/RewardsManager.exe artifact/MicrosoftRewardsApp.exe -Force
                   Copy-Item staging/manager/RewardsManager.exe artifact/RewardsManager.exe -Force
+
+                  # Retain the newer account-manager build as a separate optional executable.
+                  Copy-Item staging/app/MicrosoftRewardsApp.exe artifact/MicrosoftRewardsAccountManager.exe -Force
 
             - name: Validate application package
               shell: pwsh
@@ -137,7 +141,11 @@ jobs:
                   $ErrorActionPreference = 'Stop'
 
                   if (!(Test-Path artifact/MicrosoftRewardsApp.exe)) {
-                      throw 'MicrosoftRewardsApp.exe was not produced.'
+                      throw 'Main MicrosoftRewardsApp.exe was not produced.'
+                  }
+
+                  if (!(Test-Path artifact/MicrosoftRewardsAccountManager.exe)) {
+                      throw 'Optional MicrosoftRewardsAccountManager.exe was not produced.'
                   }
 
                   if (!(Test-Path artifact/runtime/node/node.exe)) {
@@ -200,12 +208,12 @@ jobs:
                       throw "RewardsManager.exe UI verification failed with exit code $($process.ExitCode)."
                   }
 
-            - name: Run integrated application self-test
+            - name: Run integrated account-manager self-test
               shell: pwsh
               run: |
                   $ErrorActionPreference = 'Stop'
 
-                  $process = Start-Process -FilePath "$PWD/artifact/MicrosoftRewardsApp.exe" -ArgumentList '--self-test' -PassThru -WindowStyle Hidden
+                  $process = Start-Process -FilePath "$PWD/artifact/MicrosoftRewardsAccountManager.exe" -ArgumentList '--self-test' -PassThru -WindowStyle Hidden
 
                   try {
                       if (!$process.WaitForExit(60000)) {
@@ -223,12 +231,12 @@ jobs:
                       }
                   }
 
-            - name: Verify background startup
+            - name: Verify account-manager background startup
               shell: pwsh
               run: |
                   $ErrorActionPreference = 'Stop'
 
-                  $process = Start-Process -FilePath "$PWD/artifact/MicrosoftRewardsApp.exe" -ArgumentList '--background' -PassThru -WindowStyle Hidden
+                  $process = Start-Process -FilePath "$PWD/artifact/MicrosoftRewardsAccountManager.exe" -ArgumentList '--background' -PassThru -WindowStyle Hidden
 
                   try {
                       Start-Sleep -Seconds 8
