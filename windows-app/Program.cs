@@ -7,6 +7,15 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args.Any(x => string.Equals(
+                x,
+                "--self-test",
+                StringComparison.OrdinalIgnoreCase)))
+        {
+            SelfTest.RunAsync().GetAwaiter().GetResult();
+            return;
+        }
+
         ApplicationConfiguration.Initialize();
 
         var state = SecureStore.Load();
