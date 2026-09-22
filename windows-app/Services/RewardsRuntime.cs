@@ -461,6 +461,23 @@ public sealed class RewardsRuntime : IDisposable
             "Rewards Control API did not become ready.");
     }
 
+    private async Task<bool> IsDashboardAvailableAsync(
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var response = await _http.GetAsync(
+                "http://127.0.0.1:8890/api/health",
+                cancellationToken);
+
+            return response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     public Task<string> StartRewardsAsync(
         AppState state,
         CancellationToken cancellationToken = default) =>
