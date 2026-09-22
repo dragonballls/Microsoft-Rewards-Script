@@ -18,6 +18,11 @@ public sealed class RewardsRuntime : IDisposable
     public string NodePath { get; }
     public string BrowserPath { get; }
 
+    private bool UsesSharedPackagedRoot =>
+        File.Exists(Path.Combine(BaseDirectory, "package.json")) &&
+        File.Exists(Path.Combine(BaseDirectory, "dist", "index.js")) &&
+        File.Exists(Path.Combine(BaseDirectory, "scripts", "api", "server.js"));
+
     private Process? _api;
     private Process? _dashboard;
     private bool _ownsApi;
@@ -34,8 +39,12 @@ public sealed class RewardsRuntime : IDisposable
             "runtime");
 
         AppDataRoot = localRoot;
-        BotPath = Path.Combine(localRoot, "bot");
-        DashboardPath = Path.Combine(localRoot, "dashboard");
+        BotPath = UsesSharedPackagedRoot
+            ? BaseDirectory
+            : Path.Combine(localRoot, "bot");
+        DashboardPath = UsesSharedPackagedRoot
+            ? Path.Combine(BaseDirectory, "dashboard")
+            : Path.Combine(localRoot, "dashboard");
 
         var packagedNode = Path.Combine(
             BaseDirectory,
@@ -178,6 +187,16 @@ public sealed class RewardsRuntime : IDisposable
     private async Task EnsureWritableRuntimeAsync(
         CancellationToken cancellationToken)
     {
+        if (UsesSharedPackagedRoot)
+        {
+            if (!Directory.Exists(DashboardPath))
+                throw new DirectoryNotFoundException(
+                    "Packaged dashboard is missing.");
+
+            await Task.CompletedTask;
+            return;
+        }
+
         var sourceBot = Path.Combine(BaseDirectory, "bot");
         var sourceDashboard = Path.Combine(BaseDirectory, "dashboard");
 
