@@ -129,14 +129,19 @@ export function loadAccounts(): Account[] {
             const email = envStr(`ACCOUNT_${index}_EMAIL`)
             if (!email) continue
 
-            const password = envStr(`ACCOUNT_${index}_PASSWORD`)
-            if (!password) {
+            const password = envStr(`ACCOUNT_${index}_PASSWORD`) ?? ''
+            const manualAuthenticatorVerification = envBool(
+                `ACCOUNT_${index}_MANUAL_AUTHENTICATOR_VERIFICATION`,
+                false
+            )
+            if (!password && !manualAuthenticatorVerification) {
                 throw new Error(`ACCOUNT_${index}_EMAIL is set but ACCOUNT_${index}_PASSWORD is missing`)
             }
 
             accounts.push({
                 email,
                 password,
+                manualAuthenticatorVerification,
                 totpSecret: envStr(`ACCOUNT_${index}_TOTP_SECRET`),
                 recoveryEmail: envStr(`ACCOUNT_${index}_RECOVERY_EMAIL`) ?? '',
                 geoLocale: envStr(`ACCOUNT_${index}_GEO_LOCALE`) ?? 'auto',
