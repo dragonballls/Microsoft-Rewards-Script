@@ -8,8 +8,8 @@ using System.Windows.Forms;
 namespace RewardsManager
 {
     /// <summary>
-    /// 首次启动的环境初始化向导：展示 Node/依赖/dist/浏览器/配置状态，
-    /// 提供「安装依赖并构建」「安装/修复 Node」一键按钮，全部就绪后进入主界面。
+    /// 首次启动的Environment Setup向导：展示 Node/依赖/dist/浏览器/配置状态，
+    /// 提供「Install Dependencies and Build」「Install/Fix Node」一键按钮，全部就绪后Enter Main Interface。
     /// </summary>
     internal class EnvWizardForm : Form
     {
@@ -26,15 +26,15 @@ namespace RewardsManager
         public EnvWizardForm(bool standalone = false)
         {
             _standalone = standalone;
-            Text = "环境初始化";
+            Text = "Environment Setup";
             Width = 840;
             Height = 640;
             MinimumSize = new Size(800, 560);
             StartPosition = FormStartPosition.CenterScreen;
-            Font = new Font("Microsoft YaHei UI", 9F);
+            Font = new Font("Segoe UI", 9F);
             Padding = new Padding(10);
             try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
-            FormClosing += (_, e) => { if (_busy && MessageBox.Show("安装正在进行中，确定要取消并退出吗？", "确认取消", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) e.Cancel = true; };
+            FormClosing += (_, e) => { if (_busy && MessageBox.Show("Installation is in progress. Cancel and exit?", "Confirm Cancel", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) e.Cancel = true; };
 
             // 状态区：顶部，自动根据内容撑高
             statusPanel = new TableLayoutPanel
@@ -58,10 +58,10 @@ namespace RewardsManager
                 Padding = new Padding(0, 8, 0, 6),
                 Margin = Padding.Empty
             };
-            btnInstallDeps = new Button { Text = "安装依赖并构建", AutoSize = true, Padding = new Padding(8, 3, 8, 3), Margin = new Padding(0, 0, 10, 0) };
-            btnInstallNode = new Button { Text = "安装/修复 Node", AutoSize = true, Padding = new Padding(8, 3, 8, 3), Margin = new Padding(0, 0, 10, 0) };
-            btnCancel = new Button { Text = "取消", AutoSize = true, Padding = new Padding(8, 3, 8, 3), Margin = new Padding(0, 0, 10, 0), Visible = false };
-            btnEnter = new Button { Text = standalone ? "进入主界面" : "返回主界面", AutoSize = true, Padding = new Padding(8, 3, 8, 3), Visible = !standalone };
+            btnInstallDeps = new Button { Text = "Install Dependencies and Build", AutoSize = true, Padding = new Padding(8, 3, 8, 3), Margin = new Padding(0, 0, 10, 0) };
+            btnInstallNode = new Button { Text = "Install/Fix Node", AutoSize = true, Padding = new Padding(8, 3, 8, 3), Margin = new Padding(0, 0, 10, 0) };
+            btnCancel = new Button { Text = "Cancel", AutoSize = true, Padding = new Padding(8, 3, 8, 3), Margin = new Padding(0, 0, 10, 0), Visible = false };
+            btnEnter = new Button { Text = standalone ? "Enter Main Interface" : "Return to Main Interface", AutoSize = true, Padding = new Padding(8, 3, 8, 3), Visible = !standalone };
             btnInstallDeps.Click += (_, _) => _ = DoInstallDeps();
             btnInstallNode.Click += (_, _) => _ = DoInstallNode();
             btnCancel.Click += (_, _) => _cts?.Cancel();
@@ -112,14 +112,14 @@ namespace RewardsManager
             if (node.ok)
                 nodeText = $"{node.version} ✓ ({node.path})";
             else if (string.IsNullOrEmpty(node.version))
-                nodeText = "未安装";
+                nodeText = "Not installed";
             else
-                nodeText = $"{node.version}（版本过低，需 ≥24）";
-            AddStatus("Node.js (需 ≥24):", nodeText, node.ok);
-            AddStatus("依赖 node_modules:", hasModules ? "已安装" : "缺失（需安装）", hasModules);
-            AddStatus("构建产物 dist:", hasDist ? "已生成" : "缺失（需构建）", hasDist);
-            AddStatus("浏览器内核 (chromium):", hasBrowser ? "已安装" : (hasModules ? "缺失（需下载）" : "依赖安装后检测"), hasBrowser);
-            AddStatus("配置文件 config.json:", hasConfig ? "已存在" : "将由模板自动生成", hasConfig);
+                nodeText = $"{node.version}（Version too old; ≥24 required）";
+            AddStatus("Node.js (requires ≥24):", nodeText, node.ok);
+            AddStatus("Dependencies (node_modules):", hasModules ? "Installed" : "Missing (install required)", hasModules);
+            AddStatus("Build output (dist):", hasDist ? "Built" : "Missing (build required)", hasDist);
+            AddStatus("Browser engine (Chromium):", hasBrowser ? "Installed" : (hasModules ? "Missing (download required)" : "Check after dependencies are installed"), hasBrowser);
+            AddStatus("Config file (config.json):", hasConfig ? "Present" : "Will be generated from template", hasConfig);
 
             bool allOk = node.ok && hasModules && hasDist && hasBrowser && hasConfig;
             if (!_busy)
@@ -130,11 +130,11 @@ namespace RewardsManager
             // Node 没装好时不能点「安装依赖」
             btnInstallDeps.Enabled = node.ok && !_busy;
             if (!node.ok)
-                toolTip.SetToolTip(btnInstallDeps, "请先点击「安装/修复 Node」安装 Node.js（需 ≥24）");
+                toolTip.SetToolTip(btnInstallDeps, "请先点击「Install/Fix Node」安装 Node.js（requires ≥24）");
             else
-                toolTip.SetToolTip(btnInstallDeps, "执行 npm install + 下载浏览器 + npm run build");
+                toolTip.SetToolTip(btnInstallDeps, "Runs npm install + downloads the browser + npm run build");
 
-            // 独立模式（启动前拦截）：全部就绪后自动进入主界面
+            // 独立模式（启动前拦截）：全部就绪后自动Enter Main Interface
             if (_standalone && allOk && !_busy)
             {
                 DialogResult = DialogResult.OK;
@@ -173,7 +173,7 @@ namespace RewardsManager
             var node = EnvCheck.CheckNode();
             if (!node.ok)
             {
-                MessageBox.Show("请先安装 Node.js（需 ≥24）后再安装依赖。", "需要先安装 Node", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("请先安装 Node.js（requires ≥24）后再安装依赖。", "Node Installation Required", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
             _cts = new CancellationTokenSource();
@@ -187,12 +187,12 @@ namespace RewardsManager
             {
                 int code = await EnvCheck.InstallDepsAsync(AppendOut, _cts.Token);
                 if (_cts.IsCancellationRequested)
-                    AppendOut("=== 用户取消 ===");
+                    AppendOut("=== 用户Cancel ===");
                 else
-                    AppendOut(code == 0 ? "=== 依赖安装与构建完成 ===" : "=== 安装/构建失败，请查看上方输出 ===");
+                    AppendOut(code == 0 ? "=== Dependencies installed and build completed ===" : "=== Install/build failed; see the output above ===");
             }
-            catch (OperationCanceledException) { AppendOut("=== 用户取消 ==="); }
-            catch (Exception ex) { AppendOut("异常: " + ex.Message); }
+            catch (OperationCanceledException) { AppendOut("=== 用户Cancel ==="); }
+            catch (Exception ex) { AppendOut("Exception: " + ex.Message); }
             finally
             {
                 _busy = false;
@@ -206,7 +206,7 @@ namespace RewardsManager
         private async Task DoInstallNode()
         {
             if (_busy) return;
-            if (MessageBox.Show("将尝试使用 winget 自动安装 Node.js（当前版本需 ≥24）。\n若系统无 winget 则会提示手动安装。继续？",
+            if (MessageBox.Show("将尝试使用 winget 自动安装 Node.js（当前版本requires ≥24）。\n若系统无 winget 则会提示手动安装。继续？",
                 "安装 Node.js", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
             _cts = new CancellationTokenSource();
             _busy = true;
@@ -219,12 +219,12 @@ namespace RewardsManager
             {
                 bool ok = await EnvCheck.InstallNodeAsync(AppendOut);
                 if (_cts.IsCancellationRequested)
-                    AppendOut("=== 用户取消 ===");
+                    AppendOut("=== 用户Cancel ===");
                 else if (ok)
-                    AppendOut("安装完成。请重启本程序以应用新的 Node.js，再继续安装依赖。");
+                    AppendOut("Installation complete. Restart this application to apply the new Node.js version, then install dependencies.");
             }
-            catch (OperationCanceledException) { AppendOut("=== 用户取消 ==="); }
-            catch (Exception ex) { AppendOut("异常: " + ex.Message); }
+            catch (OperationCanceledException) { AppendOut("=== 用户Cancel ==="); }
+            catch (Exception ex) { AppendOut("Exception: " + ex.Message); }
             finally
             {
                 _busy = false;
