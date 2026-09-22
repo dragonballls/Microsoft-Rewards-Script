@@ -24,6 +24,7 @@ permissions:
 jobs:
     build-windows-app:
         runs-on: windows-latest
+        timeout-minutes: 45
 
         steps:
             - name: Check out repository
@@ -42,7 +43,7 @@ jobs:
             - name: Build Rewards bot
               shell: pwsh
               env:
-                  PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}\\staging\\runtime\\browser
+                  PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/staging/runtime/browser
                   PATCHRIGHT_BROWSERS_PATH: ${{ github.workspace }}\\staging\\runtime\\browser
               run: |
                   $ErrorActionPreference = 'Stop'
@@ -146,7 +147,7 @@ jobs:
                           throw "MicrosoftRewardsApp.exe exited during startup with code $($process.ExitCode)."
                       }
 
-                      $statePath = Join-Path $env:LOCALAPPDATA 'MicrosoftRewardsAppstate.dat'
+                      $statePath = Join-Path $env:LOCALAPPDATA 'MicrosoftRewardsApp\state.dat'
 
                       if (!(Test-Path $statePath)) {
                           throw 'Application did not initialize its persistent state store.'
