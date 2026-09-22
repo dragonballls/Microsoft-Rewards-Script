@@ -18,6 +18,9 @@ on:
             - ready_for_review
         paths:
             - 'windows-app/**'
+            - 'src/**'
+            - 'manager/RewardsManager/**'
+            - 'autorun/**'
             - '.github/workflows/windows-app.yml'
 
 permissions:
@@ -105,16 +108,28 @@ jobs:
 
                   dotnet publish windows-app/MicrosoftRewardsApp.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None --output staging/app
 
+            - name: Publish original desktop manager
+              shell: pwsh
+              run: |
+                  $ErrorActionPreference = 'Stop'
+
+                  dotnet publish manager/RewardsManager/RewardsManager.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None --output staging/manager
+
             - name: Assemble portable application
               shell: pwsh
               run: |
                   $ErrorActionPreference = 'Stop'
 
-                  Copy-Item staging/app/MicrosoftRewardsApp.exe staging/MicrosoftRewardsApp.exe -Force
-                  Remove-Item staging/app -Recurse -Force
-
                   New-Item -ItemType Directory -Path artifact -Force | Out-Null
-                  Copy-Item staging/* artifact -Recurse -Force
+
+                  # Root the bot/runtime files so the original desktop manager sees the same portable layout.
+                  Copy-Item staging/bot/* artifact -Recurse -Force
+                  Copy-Item staging/dashboard artifact/dashboard -Recurse -Force
+                  Copy-Item staging/runtime artifact/runtime -Recurse -Force
+                  Copy-Item autorun artifact/autorun -Recurse -Force
+
+                  Copy-Item staging/app/MicrosoftRewardsApp.exe artifact/MicrosoftRewardsApp.exe -Force
+                  Copy-Item staging/manager/RewardsManager.exe artifact/RewardsManager.exe -Force
 
             - name: Validate application package
               shell: pwsh
@@ -129,12 +144,24 @@ jobs:
                       throw 'Bundled Node runtime is missing.'
                   }
 
-                  if (!(Test-Path artifact/bot/dist/index.js)) {
+                  if (!(Test-Path artifact/package.json)) {
+                      throw 'Root package.json is missing.'
+                  }
+
+                  if (!(Test-Path artifact/dist/index.js)) {
                       throw 'Built Rewards bot is missing.'
                   }
 
-                  if (!(Test-Path artifact/bot/scripts/api/server.js)) {
+                  if (!(Test-Path artifact/scripts/api/server.js)) {
                       throw 'Control API is missing.'
+                  }
+
+                  if (!(Test-Path artifact/autorun/run-rewards.ps1)) {
+                      throw 'Rewards automation script is missing.'
+                  }
+
+                  if (!(Test-Path artifact/RewardsManager.exe)) {
+                      throw 'Original desktop RewardsManager.exe was not produced.'
                   }
 
                   if (!(Test-Path artifact/dashboard/server.js)) {
@@ -146,6 +173,32 @@ jobs:
                   }
 
                   & artifact/runtime/node/node.exe --version
+
+            - name: Verify original desktop runtime
+              shell: pwsh
+              run: |
+                  $ErrorActionPreference = 'Stop'
+                  $process = Start-Process -FilePath "$PWD/artifact/RewardsManager.exe" -ArgumentList '--verify-runtime' -PassThru -WindowStyle Hidden
+                  if (!$process.WaitForExit(60000)) {
+                      Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+                      throw 'RewardsManager.exe runtime verification exceeded the 60 second limit.'
+                  }
+                  if ($process.ExitCode -ne 0) {
+                      throw "RewardsManager.exe runtime verification failed with exit code $($process.ExitCode)."
+                  }
+
+            - name: Verify original desktop UI
+              shell: pwsh
+              run: |
+                  $ErrorActionPreference = 'Stop'
+                  $process = Start-Process -FilePath "$PWD/artifact/RewardsManager.exe" -ArgumentList '--verify-switch' -PassThru -WindowStyle Hidden
+                  if (!$process.WaitForExit(60000)) {
+                      Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+                      throw 'RewardsManager.exe UI verification exceeded the 60 second limit.'
+                  }
+                  if ($process.ExitCode -ne 0) {
+                      throw "RewardsManager.exe UI verification failed with exit code $($process.ExitCode)."
+                  }
 
             - name: Run integrated application self-test
               shell: pwsh
