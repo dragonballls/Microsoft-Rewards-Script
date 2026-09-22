@@ -387,17 +387,21 @@ public sealed class RewardsRuntime : IDisposable
         AppState state,
         bool dashboard)
     {
-        if (!File.Exists(script))
+        var scriptPath = Path.IsPathRooted(script)
+            ? script
+            : Path.Combine(workingDirectory, script);
+
+        if (!File.Exists(scriptPath))
             throw new FileNotFoundException(
                 dashboard
                     ? "Rewards dashboard server was not found."
                     : "Rewards API server was not found.",
-                script);
+                scriptPath);
 
         var psi = new ProcessStartInfo
         {
             FileName = NodePath,
-            Arguments = $"\"{script}\"",
+            Arguments = $"\"{scriptPath}\"",
             WorkingDirectory = workingDirectory,
             UseShellExecute = false,
             CreateNoWindow = true,
