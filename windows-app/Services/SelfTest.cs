@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using MicrosoftRewardsApp.Models;
@@ -39,6 +40,7 @@ public static class SelfTest
 
             var loaded = SecureStore.Load();
 
+            Assert(loaded.ApiToken == state.ApiToken, "encrypted API key/token");
             Assert(loaded.Accounts.Count == 1, "encrypted account count");
             Assert(loaded.Accounts[0].Email == testAccount.Email, "encrypted email");
             Assert(loaded.Accounts[0].Password == testAccount.Password, "encrypted password");
@@ -54,6 +56,27 @@ public static class SelfTest
             Assert(loaded.Accounts[0].SaveFingerprintDesktop, "desktop fingerprint flag");
 
             using var runtime = new RewardsRuntime();
+
+            var launchProbe = new ProcessStartInfo
+            {
+                FileName = "node.exe",
+                UseShellExecute = false
+            };
+            RewardsEnvironment.Apply(
+                launchProbe,
+                loaded,
+                runtime.BotPath,
+                runtime.BrowserPath);
+
+            Assert(
+                launchProbe.Environment["API_TOKEN"] == loaded.ApiToken,
+                "API key/token environment propagation");
+            Assert(
+                launchProbe.Environment["ACCOUNT_1_EMAIL"] == testAccount.Email,
+                "account email environment propagation");
+            Assert(
+                launchProbe.Environment["ACCOUNT_1_PASSWORD"] == testAccount.Password,
+                "account password environment propagation");
             await runtime.EnsureRunningAsync(loaded);
 
             Assert(runtime.ApiRunning, "Control API process");

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Microsoft.Win32;
+using Microsoft.Web.WebView2.WinForms;
 using MicrosoftRewardsApp.Models;
 using MicrosoftRewardsApp.Services;
 
@@ -21,12 +22,15 @@ public sealed class MainForm : Form
     private readonly TextBox _proxyUser = new();
     private readonly TextBox _proxyPassword = new();
     private readonly CheckBox _proxyHttp = new();
+    private readonly TextBox _apiToken = new();
     private readonly CheckBox _fingerprintMobile = new();
     private readonly CheckBox _fingerprintDesktop = new();
     private readonly CheckBox _startup = new();
     private readonly Label _status = new();
     private readonly NotifyIcon _tray = new();
     private readonly System.Windows.Forms.Timer _monitor = new() { Interval = 5000 };
+    private readonly WebView2 _dashboardView = new() { Dock = DockStyle.Fill };
+    private readonly TabControl _tabs = new() { Dock = DockStyle.Fill };
 
     private AccountProfile? _current;
     private bool _allowClose;
@@ -44,6 +48,7 @@ public sealed class MainForm : Form
         StartPosition = FormStartPosition.CenterScreen;
 
         BuildUi();
+        _apiToken.Text = _state.ApiToken;
         BuildTray();
         RefreshAccounts();
 
@@ -62,6 +67,7 @@ public sealed class MainForm : Form
         {
             WindowsStartup.SetEnabled(_state.StartWithWindows);
             await EnsureServicesAsync();
+            await InitializeDashboardAsync();
 
             if (startHidden)
                 HideToTray();
@@ -104,14 +110,51 @@ public sealed class MainForm : Form
         {
             Text = "Microsoft Rewards Account",
             Dock = DockStyle.Top,
-            Height = 38,
+            Height = 34,
             Font = new Font("Segoe UI", 16, FontStyle.Bold)
         });
+
+        var apiPanel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            Height = 52,
+            ColumnCount = 3,
+            RowCount = 1,
+            Padding = new Padding(0, 4, 0, 4)
+        };
+
+        apiPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
+        apiPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        apiPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 105));
+
+        apiPanel.Controls.Add(new Label
+        {
+            Text = "Control API key/token",
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft
+        }, 0, 0);
+
+        _apiToken.Dock = DockStyle.Fill;
+        _apiToken.UseSystemPasswordChar = true;
+        apiPanel.Controls.Add(_apiToken, 1, 0);
+
+        var generateToken = MakeButton("Generate", 95);
+        generateToken.Dock = DockStyle.Fill;
+        generateToken.Click += (_, _) =>
+        {
+            _apiToken.Text = RewardsEnvironment.NewToken();
+            _state.ApiToken = _apiToken.Text;
+            SecureStore.Save(_state);
+            _status.Text = "Status: new API key/token generated and saved";
+        };
+        apiPanel.Controls.Add(generateToken, 2, 0);
+
+        right.Controls.Add(apiPanel);
 
         var grid = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
-            Height = 468,
+            Height = 416,
             ColumnCount = 2,
             RowCount = 13
         };
@@ -150,22 +193,22 @@ public sealed class MainForm : Form
 
         right.Controls.Add(new Label
         {
-            Text = "Account information is stored with Windows user-level encryption. "
+            Text = "API key/token and account information are stored with Windows user-level encryption. "
                  + "Credentials are supplied to the Rewards runtime only when it starts.",
             Dock = DockStyle.Top,
-            Height = 48,
+            Height = 40,
             ForeColor = Color.DimGray
         });
 
         _startup.Text = "Start this app with Windows";
         _startup.Dock = DockStyle.Top;
-        _startup.Height = 34;
+        _startup.Height = 30;
         right.Controls.Add(_startup);
 
         var buttons = new FlowLayoutPanel
         {
             Dock = DockStyle.Top,
-            Height = 52
+            Height = 46
         };
 
         var save = MakeButton("Save Account", 120);
@@ -181,7 +224,7 @@ public sealed class MainForm : Form
         stop.Click += async (_, _) => await StopRewardsAsync();
 
         var dashboard = MakeButton("Open Dashboard", 135);
-        dashboard.Click += (_, _) => OpenDashboard();
+        dashboard.Click += async (_, _) => await ShowDashboardAsync();
 
         buttons.Controls.Add(save);
         buttons.Controls.Add(delete);
@@ -192,12 +235,20 @@ public sealed class MainForm : Form
 
         _status.Text = "Status: starting…";
         _status.Dock = DockStyle.Bottom;
-        _status.Height = 34;
+        _status.Height = 28;
         _status.Font = new Font("Segoe UI", 10, FontStyle.Bold);
         right.Controls.Add(_status);
 
-        Controls.Add(right);
-        Controls.Add(left);
+        var settingsTab = new TabPage("Account Setup");
+        settingsTab.Controls.Add(right);
+        settingsTab.Controls.Add(left);
+
+        var dashboardTab = new TabPage("Dashboard");
+        dashboardTab.Controls.Add(_dashboardView);
+
+        _tabs.TabPages.Add(dashboardTab);
+        _tabs.TabPages.Add(settingsTab);
+        Controls.Add(_tabs);
     }
 
     private static Button MakeButton(string text, int width) =>
@@ -211,7 +262,7 @@ public sealed class MainForm : Form
 
     private static void AddRow(TableLayoutPanel grid, int row, string title, Control control)
     {
-        grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
 
         grid.Controls.Add(new Label
         {
@@ -238,7 +289,7 @@ public sealed class MainForm : Form
         stop.Click += async (_, _) => await StopRewardsAsync();
 
         var dashboard = new ToolStripMenuItem("Open Dashboard");
-        dashboard.Click += (_, _) => OpenDashboard();
+        dashboard.Click += async (_, _) => await ShowDashboardAsync();
 
         var exit = new ToolStripMenuItem("Exit");
         exit.Click += (_, _) =>
@@ -347,6 +398,7 @@ public sealed class MainForm : Form
         _current.RecoveryEmail = _recovery.Text.Trim();
         _current.GeoLocale = string.IsNullOrWhiteSpace(_geo.Text) ? "auto" : _geo.Text.Trim();
         _current.LangCode = string.IsNullOrWhiteSpace(_lang.Text) ? "en" : _lang.Text.Trim();
+        _state.ApiToken = _apiToken.Text.Trim();
         _current.ProxyUrl = _proxy.Text.Trim();
         _current.ProxyPort = (int)_proxyPort.Value;
         _current.ProxyUsername = _proxyUser.Text;
@@ -374,7 +426,28 @@ public sealed class MainForm : Form
             return;
         }
 
+        if (string.IsNullOrWhiteSpace(_password.Text))
+        {
+            MessageBox.Show(
+                "Enter the Microsoft account password before saving.",
+                "Microsoft Rewards",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            return;
+        }
+
         ReadFields();
+
+        if (string.IsNullOrWhiteSpace(_state.ApiToken))
+        {
+            MessageBox.Show(
+                "Enter a Control API key/token or click Generate.",
+                "Microsoft Rewards",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            return;
+        }
+
         SecureStore.Save(_state);
         RefreshAccounts();
 
@@ -445,6 +518,51 @@ public sealed class MainForm : Form
     private async Task StartRewardsAsync()
     {
         ReadFields();
+
+        if (string.IsNullOrWhiteSpace(_state.ApiToken))
+        {
+            MessageBox.Show(
+                "Enter a Control API key/token or click Generate before starting Rewards.",
+                "Microsoft Rewards",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            return;
+        }
+
+        var incomplete = _state.Accounts
+            .Where(a => !string.IsNullOrWhiteSpace(a.Email) &&
+                        string.IsNullOrWhiteSpace(a.Password))
+            .OrderBy(a => a.Index)
+            .ToList();
+
+        if (incomplete.Count > 0)
+        {
+            var first = incomplete[0];
+            var selected = _state.Accounts.FirstOrDefault(a => a.Index == first.Index);
+            if (selected is not null)
+                _accounts.SelectedItem = selected;
+
+            MessageBox.Show(
+                $"ACCOUNT_{first.Index} has an email but no password. Enter the password in Account Setup and save it before starting Rewards.",
+                "Microsoft Rewards",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            _tabs.SelectedIndex = 1;
+            return;
+        }
+
+        if (!_state.Accounts.Any(a => !string.IsNullOrWhiteSpace(a.Email) &&
+                                      !string.IsNullOrWhiteSpace(a.Password)))
+        {
+            MessageBox.Show(
+                "Add a Microsoft Rewards account with both email and password before starting Rewards.",
+                "Microsoft Rewards",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            _tabs.SelectedIndex = 1;
+            return;
+        }
+
         SecureStore.Save(_state);
 
         try
@@ -472,17 +590,28 @@ public sealed class MainForm : Form
         }
     }
 
-    private void OpenDashboard()
+    private async Task InitializeDashboardAsync()
     {
         try
         {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = "http://127.0.0.1:8890/#config",
-                UseShellExecute = true
-            });
+            await _dashboardView.EnsureCoreWebView2Async();
+            _dashboardView.CoreWebView2.Navigate("http://127.0.0.1:8890/");
+            _status.Text = "Status: dashboard embedded and ready";
         }
-        catch { }
+        catch (Exception ex)
+        {
+            _status.Text = $"Status: embedded dashboard unavailable • {ex.Message}";
+        }
+    }
+
+    private async Task ShowDashboardAsync()
+    {
+        _tabs.SelectedIndex = 0;
+
+        if (_dashboardView.CoreWebView2 is null)
+            await InitializeDashboardAsync();
+        else
+            _dashboardView.CoreWebView2.Navigate("http://127.0.0.1:8890/");
     }
 
     private void HideToTray()
