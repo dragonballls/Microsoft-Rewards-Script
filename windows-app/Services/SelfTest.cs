@@ -72,6 +72,17 @@ public static class SelfTest
 
             Assert(apiResponse.IsSuccessStatusCode, "authenticated Control API health");
 
+            using var unauthorizedRequest = new HttpRequestMessage(
+                HttpMethod.Get,
+                "http://127.0.0.1:3010/health");
+
+            using var unauthorizedResponse =
+                await http.SendAsync(unauthorizedRequest);
+
+            Assert(
+                unauthorizedResponse.StatusCode == System.Net.HttpStatusCode.Unauthorized,
+                "Control API rejects missing authentication");
+
             using var accountsRequest = new HttpRequestMessage(
                 HttpMethod.Get,
                 "http://127.0.0.1:3010/accounts");
@@ -106,6 +117,28 @@ public static class SelfTest
                 await http.GetAsync("http://127.0.0.1:8890/api/health");
 
             Assert(dashboardHealth.IsSuccessStatusCode, "dashboard API health");
+
+            await Task.Delay(1500);
+
+            using var dashboardAccounts =
+                await http.GetAsync("http://127.0.0.1:8890/api/accounts?historyDays=0");
+
+            Assert(dashboardAccounts.IsSuccessStatusCode, "dashboard account endpoint");
+
+            var dashboardJson =
+                JsonDocument.Parse(await dashboardAccounts.Content.ReadAsStringAsync());
+
+            var dashboardReturnedAccounts = dashboardJson.RootElement
+                .GetProperty("accounts")
+                .EnumerateArray()
+                .ToList();
+
+            Assert(
+                dashboardReturnedAccounts.Any(account =>
+                    account.TryGetProperty("email", out var email) &&
+                    email.GetString() == testAccount.Email),
+                "account visibility in dashboard");
+
             Assert(runtime.DashboardRunning, "dashboard process");
 
             Console.WriteLine("SELF_TEST_PASS encrypted-store");
